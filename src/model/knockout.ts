@@ -30,10 +30,10 @@ export interface Tie {
 
 const real = (t: Team) => !t.tbd;
 
-/** Agrupa os jogos de cada fase em confrontos (ida e volta, ou jogo único). */
-export function buildBracket(matches: Match[]): Map<string, Tie[]> {
+/** Agrupa os jogos de cada fase em confrontos (ida e volta, ou jogo único), na ordem de `stages`. */
+export function buildBracket(matches: Match[], stages: readonly (readonly [string, ...string[]])[] = KNOCKOUT_STAGES): Map<string, Tie[]> {
   const bracket = new Map<string, Tie[]>();
-  for (const [stage] of KNOCKOUT_STAGES) {
+  for (const [stage] of stages) {
     const games = matches.filter((m) => m.stage === stage).sort((a, b) => a.utcDate.localeCompare(b.utcDate));
     if (!games.length) continue;
     const ties = new Map<string, Tie>();
@@ -86,6 +86,8 @@ export interface KnockoutOutlook {
   reach: Map<string, Map<number, number>>;
   /** Chance do primeiro time de cada confronto avançar, pela chave `${fase}:${índice}` */
   advance: Map<string, number>;
+  /** Chance de cada final (campeão e vice), pela chave `${campeão}>${vice}` */
+  podium: Map<string, number>;
 }
 
 function toLeg(m: Match): Leg {
@@ -105,17 +107,23 @@ function toLeg(m: Match): Leg {
  */
 export function simulateKnockout(bracket: Map<string, Tie[]>, model: FittedModel, teamIds: number[], runs: number, rng: Rng): KnockoutOutlook {
   const { tie } = createTieSimulator(model, teamIds);
-  const stages = KNOCKOUT_STAGES.map(([k]) => k).filter((k) => bracket.has(k));
+  // As fases vêm na ordem em que buildBracket montou o chaveamento
+  const stages = [...bracket.keys()];
   // Começa na primeira fase que ainda tem confronto em aberto
   const start = stages.findIndex((k) => bracket.get(k)!.some((t) => !t.winner));
   const champion = new Map<number, number>();
   const reach = new Map<string, Map<number, number>>(stages.map((k) => [k, new Map()]));
   const advance = new Map<string, number>();
+  const podium = new Map<string, number>();
   const add = (map: Map<number, number>, id: number) => map.set(id, (map.get(id) ?? 0) + 1);
   if (start < 0) {
     const final = bracket.get('FINAL')?.[0];
-    if (final?.winner) champion.set(final.winner.id, 1);
-    return { champion, reach, advance };
+    if (final?.winner) {
+      champion.set(final.winner.id, 1);
+      const loser = final.teams.find((t) => t && t.id !== final.winner!.id);
+      if (loser) podium.set(`${final.winner.id}>${loser.id}`, 1);
+    }
+    return { champion, reach, advance, podium };
   }
 
   for (let run = 0; run < runs; run++) {
@@ -141,6 +149,7 @@ export function simulateKnockout(bracket: Map<string, Tie[]>, model: FittedModel
           w = tie([{ home: a, away: b }], true, rng).winner as number;
         }
         if (w === a) advance.set(`${stage}:${i}`, (advance.get(`${stage}:${i}`) ?? 0) + 1);
+        if (stage === 'FINAL') podium.set(`${w}>${w === a ? b : a}`, (podium.get(`${w}>${w === a ? b : a}`) ?? 0) + 1);
         next.push(w);
       });
       winners = next;
@@ -154,5 +163,6 @@ export function simulateKnockout(bracket: Map<string, Tie[]>, model: FittedModel
   norm(champion);
   for (const m of reach.values()) norm(m);
   for (const [k, v] of advance) advance.set(k, v / runs);
-  return { champion, reach, advance };
+  for (const [k, v] of podium) podium.set(k, v / runs);
+  return { champion, reach, advance, podium };
 }

@@ -56,3 +56,29 @@ test('jogo adiado há muito tempo e nunca disputado não trava o confronto', () 
   const bracket = buildBracket([ko('PLAY_OFFS', old), ko('PLAY_OFFS', match(2, b, a, [3, 1]))]);
   assert.equal(bracket.get('PLAY_OFFS')![0].winner?.id, b.id);
 });
+
+test('chances de cada final (campeão e vice) batem com as chances de título', () => {
+  const matches = [
+    ko('SEMI_FINALS', match(1, a, b, [3, 0])),
+    ko('SEMI_FINALS', soon(match(2, b, a))),
+    ko('SEMI_FINALS', match(1, c, d, [0, 0])),
+    ko('SEMI_FINALS', soon(match(2, d, c))),
+    ko('FINAL', soon(match(3, tbd(-1), tbd(-2)))),
+  ];
+  const out = simulateKnockout(buildBracket(matches), model, [1, 2, 3, 4], 4000, mulberry32(5));
+  const total = [...out.podium.values()].reduce((s, p) => s + p, 0);
+  assert.ok(Math.abs(total - 1) < 1e-9);
+  // Somando as finais em que `a` é campeão, dá a chance de título de `a`
+  const aTitle = [...out.podium].filter(([k]) => k.startsWith(`${a.id}>`)).reduce((s, [, p]) => s + p, 0);
+  assert.ok(Math.abs(aTitle - out.champion.get(a.id)!) < 1e-9);
+  // a e b estão na mesma semifinal: nunca se enfrentam na final
+  assert.ok(!out.podium.has(`${a.id}>${b.id}`));
+});
+
+test('fases de outra copa (Copa do Brasil) entram na ordem dada', () => {
+  const stages: [string, string][] = [['LAST_16', 'Oitavas'], ['FINAL', 'Final']];
+  const bracket = buildBracket([ko('FINAL', soon(match(2, a, c))), ko('LAST_16', match(1, a, b, [1, 0]))], stages);
+  assert.deepEqual([...bracket.keys()], ['LAST_16', 'FINAL']);
+  const out = simulateKnockout(bracket, model, [1, 2, 3], 1000, mulberry32(3));
+  assert.ok(Math.abs((out.champion.get(a.id) ?? 0) + (out.champion.get(c.id) ?? 0) - 1) < 1e-9);
+});

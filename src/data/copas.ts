@@ -1,4 +1,6 @@
 // Situação das copas que dão vaga extra na Libertadores 2027 pelo Brasil.
+// Libertadores e Copa do Brasil vêm sozinhas das simulações das suas abas; o que
+// está escrito aqui para elas só vale se a fonte falhar. A Sul-Americana é só daqui:
 // ATUALIZE À MÃO quando sair resultado: preencha o placar (score) de cada jogo
 // encerrado e, quando a final acontecer, troque `semifinals` por `decided`.
 //
@@ -33,10 +35,10 @@ export interface Cup {
   /** Quando a copa já acabou */
   decided?: { champion: Side; runnerUp: Side };
   /**
-   * Chance de título de cada clube, vinda de uma simulação própria da copa
-   * (a Libertadores usa a da aba Libertadores). Tem prioridade sobre `semifinals`.
+   * Chance de cada desfecho, vinda da simulação própria da copa (abas Libertadores
+   * e Copa do Brasil). Sem `runnerUp`, só o campeão importa. Tem prioridade sobre `semifinals`.
    */
-  odds?: { champion: Side; p: number }[];
+  odds?: { champion: Side; runnerUp?: Side; p: number }[];
 }
 
 export interface ContinentalCups {

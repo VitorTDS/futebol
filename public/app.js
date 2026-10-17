@@ -14,11 +14,17 @@ Chart.defaults.font.family = 'Archivo, system-ui, -apple-system, "Segoe UI", Rob
 
 const $ = (sel) => document.querySelector(sel);
 
-// Campeonato aberto: Brasileirão (bsa) ou Libertadores (lib)
+// Campeonato aberto: Brasileirão (bsa) ou uma copa: Libertadores (lib), Copa do Brasil (cdb)
 state.comp = 'bsa';
+const CUP_INFO = {
+  lib: { name: 'Libertadores', title: 'CONMEBOL Libertadores 2026', slogan: 'a glória eterna', groups: true },
+  cdb: { name: 'Copa do Brasil', title: 'Copa do Brasil 2026', slogan: 'vaga direta na Libertadores', groups: false },
+};
+const isCup = () => state.comp in CUP_INFO;
+const cupApi = (p) => `/api/${state.comp}${p}`;
 // Na Libertadores, todo clube (brasileiro ou não) tem a sua página
-const teamHref = (id) => (state.comp === 'lib' ? `#/lib/time/${id}` : `#/time/${id}`);
-const jogoHref = (id) => (state.comp === 'lib' ? `#/lib/jogo/${id}` : `#/jogo/${id}`);
+const teamHref = (id) => (isCup() ? `#/${state.comp}/time/${id}` : `#/time/${id}`);
+const jogoHref = (id) => (isCup() ? `#/${state.comp}/jogo/${id}` : `#/jogo/${id}`);
 
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -166,6 +172,14 @@ async function loadOverview() {
   await loadStrip();
 }
 
+// Diz quais copas entram nas vagas com a simulação da própria aba
+function cupSourcesText(s) {
+  const parts = [];
+  if (s?.copaDoBrasil) parts.push('quem chega à final da <a href="#/cdb/chave">Copa do Brasil</a>');
+  if (s?.libertadores) parts.push('quem ganha a <a href="#/lib/chave">Libertadores</a>');
+  return parts.length ? `As chances de ${parts.join(' e de ')} são as mesmas das abas de cada copa.` : '';
+}
+
 // Explica até onde vão as vagas, que dependem das copas ainda em disputa.
 function renderZoneNote(z) {
   const el = $('#zone-note');
@@ -179,7 +193,7 @@ function renderZoneNote(z) {
       .join('');
   el.innerHTML = `<b>Vagas mudam com as copas.</b> O Brasileirão dá 5 vagas na Libertadores, mas o campeão e o vice da Copa do Brasil
     e os campeões brasileiros da Libertadores e da Sul-Americana também se classificam. Quando quem ganha já está no G5, a vaga desce na tabela.
-    ${z.libertadoresSource === 'simulacao' ? 'A chance de cada time ganhar a Libertadores é a mesma da <a href="#/lib/chave">aba Libertadores</a>.' : ''}
+    ${cupSourcesText(z.cupSources)}
     <span class="dist"><span class="muted">Libertadores pela tabela:</span> ${dist(z.libertadoresCutoff)}</span>
     <span class="dist"><span class="muted">Sul-Americana:</span> ${dist(z.sulamericanaCutoff)}</span>`;
 }
@@ -241,11 +255,14 @@ function pickHighlight(matches) {
 }
 
 async function loadHero() {
-  const lib = state.comp === 'lib';
-  const data = await api(lib ? '/api/lib/matches' : '/api/matches');
+  const data = await api(isCup() ? cupApi('/matches') : '/api/matches');
   checkAlerts(data.matches);
-  // Alertas de gol valem para os dois campeonatos
-  if (alerts.on) api(lib ? '/api/matches' : '/api/lib/matches').then((other) => checkAlerts(other.matches), () => {});
+  // Alertas de gol valem para todos os campeonatos
+  if (alerts.on) {
+    for (const url of ['/api/matches', '/api/lib/matches', '/api/cdb/matches']) {
+      if (url !== (isCup() ? cupApi('/matches') : '/api/matches')) api(url).then((other) => checkAlerts(other.matches), () => {});
+    }
+  }
   const m = pickHighlight(data.matches);
   if (!m) {
     $('#destaque').innerHTML = '';
@@ -262,8 +279,8 @@ async function loadHero() {
       ? '<span class="tag-vivo fim">ENCERRADO</span>'
       : `<span class="tag-vivo proximo">PRÓXIMO JOGO · ${escapeHtml(when)} · ${time}</span>`;
   const side = (t) =>
-    state.comp === 'lib'
-      ? `<a class="lado" href="#/lib/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`
+    isCup()
+      ? `<a class="lado" href="${teamHref(t.id)}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`
       : `<a class="lado" href="#/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`;
   const p = m.prediction;
   const html = `${tag}
@@ -1286,9 +1303,9 @@ async function loadMatchPage() {
   const j = state.jogo;
   if (j.data?.match.id !== j.id) j.data = null;
   if (!j.data) $('#jogo-body').innerHTML = '<p class="muted">Carregando o jogo…</p>';
-  j.data = await api(state.comp === 'lib' ? `/api/lib/jogo/${j.id}` : `/api/jogo/${j.id}`);
+  j.data = await api(isCup() ? cupApi(`/jogo/${j.id}`) : `/api/jogo/${j.id}`);
   const { match: m } = j.data;
-  document.title = `${m.home.shortName} x ${m.away.shortName} · ${state.comp === 'lib' ? 'Libertadores' : 'Brasileirão'}`;
+  document.title = `${m.home.shortName} x ${m.away.shortName} · ${isCup() ? CUP_INFO[state.comp].name : 'Brasileirão'}`;
   renderMatchPage();
 }
 
@@ -1322,11 +1339,11 @@ function renderMatchPage() {
     </div>
     ${espn?.events?.some((e) => ['goal', 'penalty', 'own-goal'].includes(e.type)) ? `<div class="jh-autores"><ul>${scorers('home')}</ul><span>⚽</span><ul>${scorers('away')}</ul></div>` : ''}
     ${tieLine(d)}
-    <div class="jh-meta">${d.competition === 'lib' ? `Libertadores · ${escapeHtml(d.stageLabel)}${m.group ? ` · Grupo ${escapeHtml(m.group.replace('GROUP_', ''))}` : ''}` : `Brasileirão · Rodada ${m.matchday}`}${espn?.venue ? ` · ${escapeHtml(espn.venue.name)}${espn.venue.city ? `, ${escapeHtml(espn.venue.city)}` : ''}` : ''}</div>`;
+    <div class="jh-meta">${CUP_INFO[d.competition] ? `${CUP_INFO[d.competition].name} · ${escapeHtml(d.stageLabel)}${m.group ? ` · Grupo ${escapeHtml(m.group.replace('GROUP_', ''))}` : ''}` : `Brasileirão · Rodada ${m.matchday}`}${espn?.venue ? ` · ${escapeHtml(espn.venue.name)}${espn.venue.city ? `, ${escapeHtml(espn.venue.city)}` : ''}` : ''}</div>`;
 
   const tabs = JOGO_TABS.filter(([k]) => k !== 'tabela' || d.standings);
   if (!tabs.some(([k]) => k === state.jogo.tab)) state.jogo.tab = 'resumo';
-  $('#jogo-back').href = state.comp === 'lib' ? '#/lib/jogos' : '#/jogos';
+  $('#jogo-back').href = isCup() ? `#/${state.comp}/jogos` : '#/jogos';
   $('#jogo-tabs').innerHTML = tabs.map(
     ([k, label]) => `<button data-t="${k}" class="${state.jogo.tab === k ? 'on' : ''}" aria-pressed="${state.jogo.tab === k}">${label}</button>`,
   ).join('');
@@ -1591,17 +1608,17 @@ $('#jogo-tabs').addEventListener('click', (e) => {
 state.lib = { stage: null };
 
 async function libMeta() {
-  const o = await api('/api/lib/overview');
+  const o = await api(cupApi('/overview'));
   const updated = new Date(o.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  $('#meta').textContent = `CONMEBOL Libertadores 2026 · ${o.currentStage.label} · fonte: ${o.source} · atualizado às ${updated}`;
-  $('#lib-fase').textContent = o.currentStage.label;
+  $('#meta').textContent = `${CUP_INFO[state.comp].title} · ${o.currentStage.label} · fonte: ${o.source} · atualizado às ${updated}`;
+  $(`#${state.comp}-fase`).textContent = o.currentStage.label;
   return o;
 }
 
 // Linha de um time dentro do cartão do confronto
 function tieTeam(t, goals, won, chance) {
   if (!t) return `<div class="tt tbd"><span class="badge">?</span><span>A definir</span></div>`;
-  return `<div class="tt ${won ? 'passou' : ''}">${crestImg(t)}<a href="#/lib/time/${t.id}">${escapeHtml(t.shortName)}</a>
+  return `<div class="tt ${won ? 'passou' : ''}">${crestImg(t)}<a href="${teamHref(t.id)}">${escapeHtml(t.shortName)}</a>
     ${chance != null ? `<small class="chance-t">${pct(chance)}</small>` : ''}<b>${goals ?? ''}</b></div>`;
 }
 
@@ -1613,7 +1630,7 @@ function tieCard(t, champions) {
       const date = new Date(l.utcDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
       const pen = l.penalties ? ` (pên. ${l.penalties[0]}–${l.penalties[1]})` : '';
       if (l.home.tbd) return `<span class="perna">${date} · jogo único, campo neutro</span>`;
-      return `<a href="#/lib/jogo/${l.id}" class="perna">${played ? `${escapeHtml(l.home.tla)} ${l.homeGoals}–${l.awayGoals} ${escapeHtml(l.away.tla)}${pen}` : `${date} · ${escapeHtml(l.home.tla)} x ${escapeHtml(l.away.tla)}`}${l.status === 'LIVE' ? ' <span class="live-tag">●</span>' : ''}</a>`;
+      return `<a href="${jogoHref(l.id)}" class="perna">${played ? `${escapeHtml(l.home.tla)} ${l.homeGoals}–${l.awayGoals} ${escapeHtml(l.away.tla)}${pen}` : `${date} · ${escapeHtml(l.home.tla)} x ${escapeHtml(l.away.tla)}`}${l.status === 'LIVE' ? ' <span class="live-tag">●</span>' : ''}</a>`;
     })
     .join('');
   // Final ainda sem os dois times: mostra quem tem mais chance de chegar
@@ -1638,19 +1655,21 @@ async function loadLibBracket() {
   $('#lib-campeao').innerHTML = `<div class="corrida-card">${o.champions
     .map(
       (c) => `<div class="linha">${crestImg(c.team)}
-      <div class="trilho" style="--c:var(--amarelo)"><div data-w="${c.champion}"></div><span><a href="#/lib/time/${c.team.id}">${escapeHtml(c.team.shortName)}</a></span></div>
+      <div class="trilho" style="--c:var(--amarelo)"><div data-w="${c.champion}"></div><span><a href="${teamHref(c.team.id)}">${escapeHtml(c.team.shortName)}</a></span></div>
       <b>${pct(c.champion)}</b></div>`,
     )
     .join('')}</div>`;
   $('#lib-bracket').innerHTML = o.stages
     .map((s) => `<div class="fase-col"><h3>${escapeHtml(s.label)}</h3><div class="fase-ties">${s.ties.map((t) => tieCard(t, s.key === 'FINAL' ? o.champions : null)).join('')}</div></div>`)
     .join('');
-  $('#lib-nota').textContent = `Chances calculadas com ${o.simulations.toLocaleString('pt-BR')} simulações do mata-mata, usando o modelo ajustado com os jogos da Libertadores. A final é em jogo único, em campo neutro.`;
+  $('#cup-slogan').textContent = CUP_INFO[state.comp].slogan;
+  const jogos = state.comp === 'cdb' ? 'da Copa do Brasil e do Brasileirão' : 'da Libertadores';
+  $('#lib-nota').textContent = `Chances calculadas com ${o.simulations.toLocaleString('pt-BR')} simulações do mata-mata, usando o modelo ajustado com os jogos ${jogos}. A final é em jogo único, em campo neutro.`;
   growBars($('#lib-chave'));
 }
 
 async function loadLibMatches() {
-  const data = await api(`/api/lib/matches${state.lib.stage ? `?stage=${state.lib.stage}` : ''}`);
+  const data = await api(cupApi(`/matches${state.lib.stage ? `?stage=${state.lib.stage}` : ''}`));
   state.lib.stage = data.stage.key;
   libMeta().catch(() => {});
   $('#lib-fases').innerHTML = data.stages
@@ -1663,7 +1682,7 @@ async function loadLibMatches() {
 }
 
 async function loadLibGroups() {
-  const data = await api('/api/lib/groups');
+  const data = await api(cupApi('/groups'));
   libMeta().catch(() => {});
   $('#lib-groups').innerHTML = data.groups
     .map(
@@ -1680,7 +1699,7 @@ async function loadLibGroups() {
 }
 
 async function loadLibScorers() {
-  const data = await api('/api/lib/scorers');
+  const data = await api(cupApi('/scorers'));
   libMeta().catch(() => {});
   $('#lib-scorers').innerHTML = scorersTable(data.scorers);
 }
@@ -1713,14 +1732,18 @@ function journeyStep(s) {
 }
 
 async function loadLibTeam() {
-  const d = await api(`/api/lib/time/${state.lib.teamId}`);
+  const d = await api(cupApi(`/time/${state.lib.teamId}`));
   libMeta().catch(() => {});
   const t = d.team;
-  document.title = `${t.shortName} · Libertadores`;
+  const cup = CUP_INFO[state.comp].name;
+  document.title = `${t.shortName} · ${cup}`;
+  $('#lib-time-back').href = cup === 'Libertadores' ? '#/lib/grupos' : `#/${state.comp}/chave`;
+  $('#lib-time-back').textContent = `← ${cup}`;
+  $('#lib-team-caminho').textContent = `Caminho na ${cup}`;
   const out = d.journey.find((s) => s.result === 'eliminado');
   const won = d.journey.find((s) => s.stage === 'FINAL' && s.result === 'passou');
   const situation = won
-    ? 'Campeão da Libertadores'
+    ? `Campeão da ${cup}`
     : out
       ? `Eliminado: ${out.label.toLowerCase()}${out.sulamericana ? ' (foi para a Sul-Americana)' : ''}`
       : `Na disputa · ${pct(d.champion)} de chance de título`;
@@ -1729,7 +1752,7 @@ async function loadLibTeam() {
 
   const s = d.stats;
   const r = d.ratings;
-  const rating = (v, kind) => ratingText(v, kind).replace('da liga', 'da Libertadores');
+  const rating = (v, kind) => ratingText(v, kind).replace('da liga', `da ${cup}`);
   $('#lib-team-stats').innerHTML = [
     statCard('Campanha', `${s.won}V ${s.drawn}E ${s.lost}D`, `${s.played} jogos · ${s.goalsFor} gols marcados, ${s.goalsAgainst} sofridos`),
     statCard('Chance de título', pct(d.champion), out ? 'já foi eliminado' : 'pelas simulações do mata-mata'),
@@ -2183,7 +2206,7 @@ async function refresh() {
   try {
     const hero = loadHero();
     if (state.comp === 'bsa' && !state.metaSet && state.tab !== 'tabela') api('/api/overview').then(setMeta, () => {});
-    if (state.comp === 'lib' && state.tab === 'jogo') libMeta().catch(() => {});
+    if (isCup() && state.tab === 'jogo') libMeta().catch(() => {});
     await loaders[state.tab]();
     await hero;
   } catch (err) {
@@ -2196,16 +2219,17 @@ const LIB_PAGES = ['chave', 'jogos', 'grupos', 'gols'];
 
 function applyRoute() {
   const [page, id, , vsId] = location.hash.replace(/^#\/?/, '').split('/');
-  const comp = page === 'lib' ? 'lib' : 'bsa';
+  const comp = page in CUP_INFO ? page : 'bsa';
   if (comp !== state.comp) {
     state.comp = comp;
+    state.lib.stage = null;
     state.metaSet = false;
     state.heroHtml = null;
     state.jogo.data = null;
     $('#meta').textContent = 'Carregando…';
   }
-  if (comp === 'lib') {
-    // #/lib/chave, #/lib/jogos, #/lib/jogo/123...
+  if (isCup()) {
+    // #/lib/chave, #/cdb/jogos, #/lib/jogo/123, #/cdb/time/45...
     const jogoId = Number(location.hash.split('/')[3]);
     if (id === 'time' && jogoId) {
       state.tab = 'lib-time';
@@ -2219,8 +2243,9 @@ function applyRoute() {
       }
       state.jogo.id = jogoId;
     } else {
-      state.tab = `lib-${LIB_PAGES.includes(id) ? id : 'chave'}`;
-      document.title = 'Libertadores · Painel';
+      const pages = CUP_INFO[comp].groups ? LIB_PAGES : ['chave', 'jogos'];
+      state.tab = `lib-${pages.includes(id) ? id : 'chave'}`;
+      document.title = `${CUP_INFO[comp].name} · Painel`;
     }
   } else if (page === 'time' && Number(id)) {
     state.tab = 'time';
@@ -2247,10 +2272,13 @@ function applyRoute() {
   document.body.dataset.tab = state.tab;
   // Cores, abas e nome mudam conforme o campeonato
   document.body.dataset.comp = state.comp;
-  $('#brand-nome').textContent = state.comp === 'lib' ? 'Libertadores' : 'Brasileirão';
+  $('#brand-nome').textContent = isCup() ? CUP_INFO[state.comp].name : 'Brasileirão';
   document.querySelectorAll('.comp-card').forEach((c) => c.classList.toggle('on', c.dataset.comp === state.comp));
   let activeTab = state.tab === 'jogador' ? 'scout' : state.tab === 'jogo' ? 'jogos' : state.tab;
-  if (state.comp === 'lib') activeTab = state.tab === 'jogo' ? 'lib/jogos' : state.tab === 'lib-time' ? 'lib/grupos' : state.tab.replace('lib-', 'lib/');
+  if (isCup()) {
+    const c = state.comp;
+    activeTab = state.tab === 'jogo' ? `${c}/jogos` : state.tab === 'lib-time' ? `${c}/${CUP_INFO[c].groups ? 'grupos' : 'chave'}` : state.tab.replace('lib-', `${c}/`);
+  }
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === activeTab));
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === state.tab));
   refresh();

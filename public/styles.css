@@ -390,7 +390,8 @@ body[data-tab="jogo"] .destaque { display: none; }
 .comp-card.on { background: var(--amarelo); color: var(--tinta); border-color: var(--amarelo); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
 
 /* Só aparecem as abas do campeonato aberto */
-body[data-comp="lib"] .bsa-tab, body:not([data-comp="lib"]) .lib-tab { display: none !important; }
+body[data-comp="lib"] .bsa-tab, body[data-comp="cdb"] .bsa-tab, body:not([data-comp="lib"]) .lib-tab, body:not([data-comp="cdb"]) .cdb-tab { display: none !important; }
+.comp-card b .short { display: none; }
 
 /* Libertadores: azul-marinho e dourado, as cores da taça */
 body[data-comp="lib"] {
@@ -747,3 +748,24 @@ td.metric { font-variant-numeric: tabular-nums; }
 tr.eu td { background: rgba(217, 180, 74, 0.18); font-weight: 800; }
 .tt a, .trilho a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt a:hover, .trilho a:hover { text-decoration: underline; }
+
+/* Copa do Brasil: azul da CBF, com destaque em azul-claro */
+body[data-comp="cdb"] {
+  --lousa: #0d3166;
+  --lousa-2: #123f80;
+  --amarelo: #7fb8ff;
+  --madeira: #4d5b6e;
+  --verde: #1f7a4d;
+  --giz-mute: #b9c6da;
+}
+body[data-comp="cdb"] .hero::before { background: linear-gradient(90deg, #009c3b 0 33%, #ffdf00 33% 66%, #7fb8ff 66%); }
+body[data-comp="cdb"] .hero { box-shadow: 0 6px 0 #2c3a4d; }
+@media (max-width: 640px) {
+  .comp-card b .full { display: none; }
+  .comp-card b .short { display: inline; }
+  /* Três campeonatos lado a lado: sem o ícone e com letra menor */
+  .comp-switch { gap: 6px; }
+  .comp-card { min-width: 0; padding: 6px 4px; }
+  .comp-card .ico { display: none; }
+  .comp-card b { font-size: 11px; white-space: nowrap; }
+}

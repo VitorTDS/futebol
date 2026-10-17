@@ -16,7 +16,8 @@ import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026, type ContinentalCups } from './data/copas.ts';
 import { getMatchCenter } from './data/espn.ts';
-import { libertadores, libertadoresOdds } from './libertadores.ts';
+import { createCopaDoBrasilCup } from './copaDoBrasil.ts';
+import { libertadoresCup } from './libertadores.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
@@ -48,8 +49,8 @@ interface Analysis {
   zones: ZoneOutlook;
   /** Copas que dão vaga extra (null: vale só a tabela) */
   cups: ContinentalCups | null;
-  /** De onde veio a chance de título da Libertadores */
-  libertadoresSource: 'simulacao' | 'semifinais' | null;
+  /** Copas que entraram nas vagas pela simulação da própria aba */
+  cupSources: CupSources | null;
   /** Histórico de acertos de cada modelo (para comparar) */
   history: Record<ModelKind, BacktestResult>;
   calibration: CalibrationState;
@@ -221,19 +222,48 @@ function cupsApply(matches: Match[]): boolean {
   return provider.name === 'football-data.org' && config.competition === 'BSA' && season === 2026;
 }
 
+const copaDoBrasilCup = createCopaDoBrasilCup({
+  year: Number(config.season) || new Date().getUTCFullYear(),
+  leagueMatches: () => provider.getMatches(),
+  leagueTeams: async () => teamsFrom(await provider.getMatches()),
+});
+
+/** Quais copas entram nas vagas com a simulação da própria aba (as outras, pelo copas.ts) */
+export interface CupSources {
+  libertadores: boolean;
+  copaDoBrasil: boolean;
+}
+
 /**
- * Situação das copas para as vagas. A Libertadores usa a mesma simulação da aba
- * Libertadores (chaveamento real e modelo próprio); se ela falhar, volta para as
- * semifinais escritas à mão em copas.ts.
+ * Situação das copas para as vagas. Libertadores e Copa do Brasil usam a mesma
+ * simulação das suas abas (chaveamento real e modelo próprio); se alguma falhar,
+ * ela volta para as semifinais escritas à mão em copas.ts. A Sul-Americana é sempre à mão.
  */
-async function currentCups(teams: Team[]): Promise<{ cups: ContinentalCups; source: 'simulacao' | 'semifinais'; key: string }> {
+async function currentCups(teams: Team[]): Promise<{ cups: ContinentalCups; sources: CupSources; key: string }> {
+  const ids = new Set(teams.map((t) => t.id));
+  const cups = { ...CUPS_2026 };
+  const sources: CupSources = { libertadores: false, copaDoBrasil: false };
+  const keys: string[] = [];
   try {
-    const lib = await libertadoresOdds(new Set(teams.map((t) => t.id)));
-    return { cups: { ...CUPS_2026, libertadores: { ...CUPS_2026.libertadores, odds: lib.odds } }, source: 'simulacao', key: lib.updatedAt };
+    const lib = await libertadoresCup.outcomes(ids);
+    cups.libertadores = { ...cups.libertadores, odds: lib.odds };
+    sources.libertadores = true;
+    keys.push(lib.updatedAt);
   } catch (err) {
     console.warn('Vagas: sem a simulação da Libertadores, usando as semifinais de copas.ts:', (err as Error).message);
-    return { cups: CUPS_2026, source: 'semifinais', key: 'manual' };
   }
+  try {
+    // Campeão e vice da Copa do Brasil vão à Libertadores: cada desfecho é uma final
+    const cdb = await copaDoBrasilCup.outcomes(ids, true);
+    if (cdb.odds.length) {
+      cups.copaDoBrasil = { ...cups.copaDoBrasil, odds: cdb.odds };
+      sources.copaDoBrasil = true;
+      keys.push(cdb.updatedAt);
+    }
+  } catch (err) {
+    console.warn('Vagas: sem a simulação da Copa do Brasil, usando as semifinais de copas.ts:', (err as Error).message);
+  }
+  return { cups, sources, key: keys.join('+') || 'manual' };
 }
 
 function runSimulation(
@@ -281,7 +311,7 @@ async function getAnalysis(): Promise<Analysis> {
     outlook: new Map(outlook.teams.map((o) => [o.teamId, o])),
     zones: outlook.zones,
     cups,
-    libertadoresSource: cupState?.source ?? null,
+    cupSources: cupState?.sources ?? null,
     history: history.byModel,
     historyWithoutBackground: history.withoutBackground,
     calibration: calib,
@@ -313,7 +343,7 @@ app.get(
       updatedAt: a.updatedAt,
       simulations: config.simulations,
       zones: a.zones.likely,
-      zoneOutlook: { ...a.zones, withCups: !!a.cups, libertadoresSource: a.libertadoresSource },
+      zoneOutlook: { ...a.zones, withCups: !!a.cups, cupSources: a.cupSources },
       currentMatchday: a.currentMatchday,
       totalMatchdays: a.totalMatchdays,
       standings: a.standings.map((row) => ({ ...row, outlook: a.outlook.get(row.team.id) })),
@@ -716,7 +746,8 @@ app.get(
   }),
 );
 
-app.use('/api/lib', libertadores);
+app.use('/api/lib', libertadoresCup.router);
+app.use('/api/cdb', copaDoBrasilCup.router);
 
 // ---------- Ao vivo: avisa as páginas abertas assim que um placar muda ----------
 
