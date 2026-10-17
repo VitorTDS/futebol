@@ -17,10 +17,10 @@ export interface CupOutcomes {
 const SIDE = MAX_GOALS + 1;
 
 /**
- * Sorteia o resultado das três copas usando o mesmo modelo do Brasileirão.
- * Clube de fora da Série A joga como um time médio da liga.
+ * Simula confrontos de mata-mata (ida e volta ou jogo único) com um modelo.
+ * Clube que o modelo não conhece joga como um time médio entre os conhecidos.
  */
-export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], cups: ContinentalCups) {
+export function createTieSimulator(model: FittedModel, leagueTeamIds: number[]) {
   const league = new Set(leagueTeamIds);
   const known = (s: Side): s is number => typeof s === 'number' && league.has(s);
   const cdfs = new Map<string, Float64Array>();
@@ -38,8 +38,10 @@ export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], 
   }
 
   /** Distribuição acumulada dos placares, para sortear. */
-  function cdf(home: Side, away: Side, neutral: boolean): Float64Array {
-    const key = `${home}|${away}|${neutral}`;
+  function cdf(home: Side, away: Side, neutral: boolean, remaining = 1): Float64Array {
+    // Fração do jogo arredondada: jogos ao vivo reaproveitam a conta por alguns minutos
+    const frac = Math.round(remaining * 90) / 90;
+    const key = `${home}|${away}|${neutral}|${frac}`;
     let c = cdfs.get(key);
     if (!c) {
       let lh: number;
@@ -55,7 +57,8 @@ export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], 
       }
       c = new Float64Array(SIDE * SIDE);
       let acc = 0;
-      scoreMatrix(lh, la, model.rho).forEach((row, hg) =>
+      // A correção de Dixon-Coles vale para o jogo inteiro, não para o "resto" de um jogo ao vivo
+      scoreMatrix(lh * frac, la * frac, frac < 1 ? 0 : model.rho).forEach((row, hg) =>
         row.forEach((p, ag) => {
           acc += p;
           c![hg * SIDE + ag] = acc;
@@ -68,14 +71,15 @@ export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], 
 
   function play(leg: Leg, neutral: boolean, rng: Rng): [number, number] {
     if (leg.score) return leg.score;
-    const c = cdf(leg.home, leg.away, neutral);
+    const c = cdf(leg.home, leg.away, neutral, leg.live?.remaining ?? 1);
     const u = rng();
     let k = 0;
     while (k < c.length - 1 && c[k] < u) k++;
-    return [Math.floor(k / SIDE), k % SIDE];
+    const [h0, a0] = leg.live?.score ?? [0, 0];
+    return [h0 + Math.floor(k / SIDE), a0 + (k % SIDE)];
   }
 
-  /** Soma dos gols nos jogos do confronto; empate vai para os pênaltis (50%). */
+  /** Soma dos gols nos jogos do confronto; empate vai para os pênaltis (50%, ou o resultado se já houve). */
   function tie(legs: Leg[], neutral: boolean, rng: Rng): { winner: Side; loser: Side } {
     const a = legs[0].home;
     const b = legs[0].away;
@@ -91,9 +95,22 @@ export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], 
         gb += hg;
       }
     }
-    const aWins = ga > gb || (ga === gb && rng() < 0.5);
+    let aWins = ga > gb;
+    if (ga === gb) {
+      const shootout = legs.at(-1)!;
+      const pen = shootout.score && shootout.penalties;
+      // Pênaltis já batidos decidem; senão, cara ou coroa
+      aWins = pen ? (shootout.home === a ? pen[0] > pen[1] : pen[1] > pen[0]) : rng() < 0.5;
+    }
     return aWins ? { winner: a, loser: b } : { winner: b, loser: a };
   }
+
+  return { tie, expected };
+}
+
+/** Sorteia o resultado das três copas usando o mesmo modelo do Brasileirão. */
+export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], cups: ContinentalCups) {
+  const { tie } = createTieSimulator(model, leagueTeamIds);
 
   function runCup(cup: Cup, rng: Rng): CupResult {
     if (cup.decided) return cup.decided;

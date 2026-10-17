@@ -18,6 +18,10 @@ export interface Leg {
   away: Side;
   /** Placar, se o jogo já aconteceu */
   score?: [number, number];
+  /** Jogo em andamento: placar atual e quanto do jogo ainda falta (0 a 1) */
+  live?: { score: [number, number]; remaining: number };
+  /** Disputa de pênaltis já decidida neste jogo [mandante, visitante] */
+  penalties?: [number, number] | null;
 }
 
 export interface Cup {

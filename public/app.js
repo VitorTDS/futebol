@@ -14,6 +14,10 @@ Chart.defaults.font.family = 'Archivo, system-ui, -apple-system, "Segoe UI", Rob
 
 const $ = (sel) => document.querySelector(sel);
 
+// Campeonato aberto: Brasileirão (bsa) ou Libertadores (lib)
+state.comp = 'bsa';
+const jogoHref = (id) => (state.comp === 'lib' ? `#/lib/jogo/${id}` : `#/jogo/${id}`);
+
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -36,7 +40,9 @@ function teamHtml(team, { short = false } = {}) {
   const icon = team.crest
     ? `<img class="crest" src="${escapeHtml(team.crest)}" alt="" loading="lazy" />`
     : `<span class="badge">${escapeHtml(team.tla)}</span>`;
-  return `<a class="team" href="#/time/${team.id}">${icon}<span>${escapeHtml(short ? team.tla : team.shortName)}</span></a>`;
+  const name = `${icon}<span>${escapeHtml(short ? team.tla : team.shortName)}</span>`;
+  // A página do time é do Brasileirão: na Libertadores o nome não é link
+  return state.comp === 'lib' ? `<span class="team">${name}</span>` : `<a class="team" href="#/time/${team.id}">${name}</a>`;
 }
 
 function probCell(p, color) {
@@ -89,7 +95,7 @@ const RESULT_LABEL = { V: 'Vitória', E: 'Empate', D: 'Derrota' };
 // Letra da forma recente (V/E/D) que abre a partida em que aconteceu
 function formLink(result, game) {
   if (!game) return `<span class="${result}">${result}</span>`;
-  return `<a class="${result}" href="#/jogo/${game.id}" title="${RESULT_LABEL[result]}: ${escapeHtml(game.score)}" aria-label="${RESULT_LABEL[result]}: ${escapeHtml(game.score)}">${result}</a>`;
+  return `<a class="${result}" href="${jogoHref(game.id)}" title="${RESULT_LABEL[result]}: ${escapeHtml(game.score)}" aria-label="${RESULT_LABEL[result]}: ${escapeHtml(game.score)}">${result}</a>`;
 }
 
 // Linha de informações no topo; aparece em qualquer aba.
@@ -206,7 +212,7 @@ async function loadStrip() {
       const when = date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
       const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const p = m.prediction;
-      return `<a class="jogo ${live ? 'live' : ''}" href="#/jogo/${m.id}" style="animation-delay:${i * 50}ms">
+      return `<a class="jogo ${live ? 'live' : ''}" href="${jogoHref(m.id)}" style="animation-delay:${i * 50}ms">
         <header><span>${live ? `<span class="live-tag">● ${m.minute ?? ''}'</span>` : finished ? 'Encerrado' : when}</span><span>${time}</span></header>
         <div class="vs">
           <div>${crestImg(m.home)}${escapeHtml(m.home.tla)}</div>
@@ -232,8 +238,11 @@ function pickHighlight(matches) {
 }
 
 async function loadHero() {
-  const data = await api('/api/matches');
+  const lib = state.comp === 'lib';
+  const data = await api(lib ? '/api/lib/matches' : '/api/matches');
   checkAlerts(data.matches);
+  // Alertas de gol valem para os dois campeonatos
+  if (alerts.on) api(lib ? '/api/matches' : '/api/lib/matches').then((other) => checkAlerts(other.matches), () => {});
   const m = pickHighlight(data.matches);
   if (!m) {
     $('#destaque').innerHTML = '';
@@ -249,7 +258,10 @@ async function loadHero() {
     : finished
       ? '<span class="tag-vivo fim">ENCERRADO</span>'
       : `<span class="tag-vivo proximo">PRÓXIMO JOGO · ${escapeHtml(when)} · ${time}</span>`;
-  const side = (t) => `<a class="lado" href="#/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`;
+  const side = (t) =>
+    state.comp === 'lib'
+      ? `<span class="lado">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></span>`
+      : `<a class="lado" href="#/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`;
   const p = m.prediction;
   const html = `${tag}
     <div class="placar">
@@ -264,7 +276,7 @@ async function loadHero() {
       <div class="palpite">${live ? 'Placar final mais provável' : 'Placar mais provável'}: ${p.likelyScore[0]} × ${p.likelyScore[1]}</div></div>`
         : ''
     }
-    <a class="ver-detalhes" href="#/jogo/${m.id}">Ver detalhes do jogo ›</a>`;
+    <a class="ver-detalhes" href="${jogoHref(m.id)}">Ver detalhes do jogo ›</a>`;
   // Só redesenha se algo mudou, para as barras não recomeçarem a cada atualização.
   if (state.heroHtml === html) return;
   state.heroHtml = html;
@@ -315,7 +327,7 @@ function matchCard(m, watchUrl) {
     <div class="match-head"><span>${status}</span></div>
     <div class="scoreline">${teamHtml(m.home)}${score}${teamHtml(m.away)}</div>
     ${prediction}
-    <a class="ver-jogo" href="#/jogo/${m.id}">Ver detalhes do jogo ›</a>
+    <a class="ver-jogo" href="${jogoHref(m.id)}">Ver detalhes do jogo ›</a>
   </article>`;
 }
 
@@ -1208,9 +1220,14 @@ async function loadScorers() {
     </div>`;
     return;
   }
-  $('#scorers').innerHTML = `<div class="table-wrap"><table>
+  $('#scorers').innerHTML = scorersTable(data.scorers);
+}
+
+function scorersTable(scorers) {
+  if (!scorers?.length) return '<div class="empty">Ainda não há artilharia.</div>';
+  return `<div class="table-wrap"><table>
     <thead><tr><th>#</th><th class="left">Jogador</th><th class="left">Time</th><th>Gols</th><th>Assist.</th><th>Pênaltis</th></tr></thead>
-    <tbody>${data.scorers
+    <tbody>${scorers
       .map(
         (s, i) => `<tr>
           <td>${i + 1}</td>
@@ -1266,9 +1283,9 @@ async function loadMatchPage() {
   const j = state.jogo;
   if (j.data?.match.id !== j.id) j.data = null;
   if (!j.data) $('#jogo-body').innerHTML = '<p class="muted">Carregando o jogo…</p>';
-  j.data = await api(`/api/jogo/${j.id}`);
+  j.data = await api(state.comp === 'lib' ? `/api/lib/jogo/${j.id}` : `/api/jogo/${j.id}`);
   const { match: m } = j.data;
-  document.title = `${m.home.shortName} x ${m.away.shortName} · Painel do Brasileirão`;
+  document.title = `${m.home.shortName} x ${m.away.shortName} · ${state.comp === 'lib' ? 'Libertadores' : 'Brasileirão'}`;
   renderMatchPage();
 }
 
@@ -1301,9 +1318,13 @@ function renderMatchPage() {
       ${side(m.away, 'away')}
     </div>
     ${espn?.events?.some((e) => ['goal', 'penalty', 'own-goal'].includes(e.type)) ? `<div class="jh-autores"><ul>${scorers('home')}</ul><span>⚽</span><ul>${scorers('away')}</ul></div>` : ''}
-    <div class="jh-meta">Brasileirão · Rodada ${m.matchday}${espn?.venue ? ` · ${escapeHtml(espn.venue.name)}${espn.venue.city ? `, ${escapeHtml(espn.venue.city)}` : ''}` : ''}</div>`;
+    ${tieLine(d)}
+    <div class="jh-meta">${d.competition === 'lib' ? `Libertadores · ${escapeHtml(d.stageLabel)}${m.group ? ` · Grupo ${escapeHtml(m.group.replace('GROUP_', ''))}` : ''}` : `Brasileirão · Rodada ${m.matchday}`}${espn?.venue ? ` · ${escapeHtml(espn.venue.name)}${espn.venue.city ? `, ${escapeHtml(espn.venue.city)}` : ''}` : ''}</div>`;
 
-  $('#jogo-tabs').innerHTML = JOGO_TABS.map(
+  const tabs = JOGO_TABS.filter(([k]) => k !== 'tabela' || d.standings);
+  if (!tabs.some(([k]) => k === state.jogo.tab)) state.jogo.tab = 'resumo';
+  $('#jogo-back').href = state.comp === 'lib' ? '#/lib/jogos' : '#/jogos';
+  $('#jogo-tabs').innerHTML = tabs.map(
     ([k, label]) => `<button data-t="${k}" class="${state.jogo.tab === k ? 'on' : ''}" aria-pressed="${state.jogo.tab === k}">${label}</button>`,
   ).join('');
 
@@ -1316,6 +1337,20 @@ function renderMatchPage() {
     : d.espnError
       ? `Não foi possível buscar estatísticas e escalações agora (${escapeHtml(d.espnError)}).`
       : 'Estatísticas e escalações não encontradas para este jogo.';
+}
+
+// Mata-mata: placar agregado e chance de passar
+function tieLine(d) {
+  const t = d.tie;
+  if (!t || !t.teams[0]) return '';
+  const [a, b] = t.teams;
+  const agg = t.legs > 1 ? `Agregado: ${escapeHtml(a.shortName)} ${t.aggregate[0]} – ${t.aggregate[1]} ${escapeHtml(b.shortName)}` : '';
+  const who = t.winner
+    ? `${escapeHtml((t.winner === a.id ? a : b).shortName)} avançou`
+    : t.advance != null
+      ? `Chance de avançar: ${escapeHtml(a.shortName)} ${pct(t.advance)} · ${escapeHtml(b.shortName)} ${pct(1 - t.advance)}`
+      : '';
+  return `<div class="jh-tie">${[agg, who].filter(Boolean).join(' · ')}</div>`;
 }
 
 function timeline(d) {
@@ -1411,9 +1446,10 @@ function matchStats(d) {
   const legend = `<div class="stat-legenda"><span>${crestImg(m.home)}${escapeHtml(m.home.shortName)}</span><span>${escapeHtml(m.away.shortName)}${crestImg(m.away)}</span></div>`;
   if (espn?.stats.length) return `<div class="card-j">${legend}${statBars(espn.stats, colors)}</div>`;
 
-  // Antes do jogo: comparação da temporada
+  // Antes do jogo: comparação da temporada (no mata-mata da Libertadores não há tabela)
   const h = d.home.standing;
   const a = d.away.standing;
+  if (!h || !a) return '<div class="card-j vazio-j"><h3>Estatísticas</h3><p>As estatísticas do jogo aparecem quando a bola rolar.</p></div>';
   const per = (x, n) => (n ? x / n : 0);
   const fmt1 = (x) => x.toFixed(1).replace('.', ',');
   const rows = [
@@ -1545,6 +1581,112 @@ $('#jogo-tabs').addEventListener('click', (e) => {
   if (!b) return;
   state.jogo.tab = b.dataset.t;
   renderMatchPage();
+});
+
+// ---------- Libertadores ----------
+
+state.lib = { stage: null };
+
+async function libMeta() {
+  const o = await api('/api/lib/overview');
+  const updated = new Date(o.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  $('#meta').textContent = `CONMEBOL Libertadores 2026 · ${o.currentStage.label} · fonte: ${o.source} · atualizado às ${updated}`;
+  $('#lib-fase').textContent = o.currentStage.label;
+  return o;
+}
+
+// Linha de um time dentro do cartão do confronto
+function tieTeam(t, goals, won, chance) {
+  if (!t) return `<div class="tt tbd"><span class="badge">?</span><span>A definir</span></div>`;
+  return `<div class="tt ${won ? 'passou' : ''}">${crestImg(t)}<span>${escapeHtml(t.shortName)}</span>
+    ${chance != null ? `<small class="chance-t">${pct(chance)}</small>` : ''}<b>${goals ?? ''}</b></div>`;
+}
+
+function tieCard(t, champions) {
+  const [a, b] = t.teams;
+  const legs = t.legs
+    .map((l) => {
+      const played = l.status === 'FINISHED' || l.status === 'LIVE';
+      const date = new Date(l.utcDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      const pen = l.penalties ? ` (pên. ${l.penalties[0]}–${l.penalties[1]})` : '';
+      if (l.home.tbd) return `<span class="perna">${date} · jogo único, campo neutro</span>`;
+      return `<a href="#/lib/jogo/${l.id}" class="perna">${played ? `${escapeHtml(l.home.tla)} ${l.homeGoals}–${l.awayGoals} ${escapeHtml(l.away.tla)}${pen}` : `${date} · ${escapeHtml(l.home.tla)} x ${escapeHtml(l.away.tla)}`}${l.status === 'LIVE' ? ' <span class="live-tag">●</span>' : ''}</a>`;
+    })
+    .join('');
+  // Final ainda sem os dois times: mostra quem tem mais chance de chegar
+  const finalists =
+    !a && champions?.length
+      ? `<div class="provaveis">${champions
+          .filter((c) => c.final > 0.005)
+          .map((c) => `<span>${crestImg(c.team)}${escapeHtml(c.team.shortName)} <b>${pct(c.final)}</b></span>`)
+          .join('')}</div>`
+      : '';
+  const played = t.legs.some((l) => l.status === 'FINISHED' || l.status === 'LIVE');
+  return `<div class="tie ${t.winner ? 'decidido' : ''}">
+    ${tieTeam(a, played && a ? t.aggregate[0] : null, t.winner === a?.id, t.advance)}
+    ${tieTeam(b, played && b ? t.aggregate[1] : null, t.winner === b?.id, t.advance != null ? 1 - t.advance : null)}
+    ${finalists}
+    <div class="pernas">${legs}</div>
+  </div>`;
+}
+
+async function loadLibBracket() {
+  const o = await libMeta();
+  $('#lib-campeao').innerHTML = `<div class="corrida-card">${o.champions
+    .map(
+      (c) => `<div class="linha">${crestImg(c.team)}
+      <div class="trilho" style="--c:var(--amarelo)"><div data-w="${c.champion}"></div><span>${escapeHtml(c.team.shortName)}</span></div>
+      <b>${pct(c.champion)}</b></div>`,
+    )
+    .join('')}</div>`;
+  $('#lib-bracket').innerHTML = o.stages
+    .map((s) => `<div class="fase-col"><h3>${escapeHtml(s.label)}</h3><div class="fase-ties">${s.ties.map((t) => tieCard(t, s.key === 'FINAL' ? o.champions : null)).join('')}</div></div>`)
+    .join('');
+  $('#lib-nota').textContent = `Chances calculadas com ${o.simulations.toLocaleString('pt-BR')} simulações do mata-mata, usando o modelo ajustado com os jogos da Libertadores. A final é em jogo único, em campo neutro.`;
+  growBars($('#lib-chave'));
+}
+
+async function loadLibMatches() {
+  const data = await api(`/api/lib/matches${state.lib.stage ? `?stage=${state.lib.stage}` : ''}`);
+  state.lib.stage = data.stage.key;
+  libMeta().catch(() => {});
+  $('#lib-fases').innerHTML = data.stages
+    .map((s) => `<button data-stage="${s.key}" class="${s.key === data.stage.key ? 'on' : ''}">${escapeHtml(s.label)}</button>`)
+    .join('');
+  // Na fase de grupos, separa os jogos por rodada
+  const cards = data.matches.map((m) => matchCard(m, data.watchUrl));
+  $('#lib-matches').innerHTML = cards.length ? cards.join('') : '<div class="empty">Sem jogos nesta fase.</div>';
+  growBars($('#lib-matches'));
+}
+
+async function loadLibGroups() {
+  const data = await api('/api/lib/groups');
+  libMeta().catch(() => {});
+  $('#lib-groups').innerHTML = data.groups
+    .map(
+      (g) => `<div class="grupo"><h3>Grupo ${escapeHtml(g.group)}</h3><div class="table-wrap"><table class="standings mini-tab">
+      <thead><tr><th>#</th><th class="left">Time</th><th>P</th><th>J</th><th>SG</th><th>Últimos</th></tr></thead><tbody>${g.rows
+        .map(
+          (r) => `<tr class="${r.position <= data.zones.libertadores ? 'lib' : r.position <= data.zones.sulamericana ? 'sul' : ''}">
+          <td class="pos">${r.position}</td><td class="left">${teamHtml(r.team)}</td><td class="points">${r.points}</td><td>${r.played}</td>
+          <td>${r.goalDiff > 0 ? '+' : ''}${r.goalDiff}</td><td><span class="form">${r.form.map((x, i) => formLink(x, r.formMatches[i])).join('')}</span></td></tr>`,
+        )
+        .join('')}</tbody></table></div></div>`,
+    )
+    .join('');
+}
+
+async function loadLibScorers() {
+  const data = await api('/api/lib/scorers');
+  libMeta().catch(() => {});
+  $('#lib-scorers').innerHTML = scorersTable(data.scorers);
+}
+
+$('#lib-fases').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-stage]');
+  if (!b) return;
+  state.lib.stage = b.dataset.stage;
+  refresh();
 });
 
 // ---------- Simulador "e se" ----------
@@ -1936,13 +2078,18 @@ const loaders = {
   scout: loadScout,
   jogador: loadPlayer,
   jogo: loadMatchPage,
+  'lib-chave': loadLibBracket,
+  'lib-jogos': loadLibMatches,
+  'lib-grupos': loadLibGroups,
+  'lib-gols': loadLibScorers,
   ese: loadWhatif,
 };
 
 async function refresh() {
   try {
     const hero = loadHero();
-    if (!state.metaSet && state.tab !== 'tabela') api('/api/overview').then(setMeta, () => {});
+    if (state.comp === 'bsa' && !state.metaSet && state.tab !== 'tabela') api('/api/overview').then(setMeta, () => {});
+    if (state.comp === 'lib' && state.tab === 'jogo') libMeta().catch(() => {});
     await loaders[state.tab]();
     await hero;
   } catch (err) {
@@ -1951,9 +2098,33 @@ async function refresh() {
 }
 
 // Navegação pelo endereço: #/jogos, #/time/12 etc. (o botão "voltar" do navegador funciona)
+const LIB_PAGES = ['chave', 'jogos', 'grupos', 'gols'];
+
 function applyRoute() {
   const [page, id, , vsId] = location.hash.replace(/^#\/?/, '').split('/');
-  if (page === 'time' && Number(id)) {
+  const comp = page === 'lib' ? 'lib' : 'bsa';
+  if (comp !== state.comp) {
+    state.comp = comp;
+    state.metaSet = false;
+    state.heroHtml = null;
+    state.jogo.data = null;
+    $('#meta').textContent = 'Carregando…';
+  }
+  if (comp === 'lib') {
+    // #/lib/chave, #/lib/jogos, #/lib/jogo/123...
+    const jogoId = Number(location.hash.split('/')[3]);
+    if (id === 'jogo' && jogoId) {
+      state.tab = 'jogo';
+      if (state.jogo.id !== jogoId) {
+        state.jogo.tab = 'resumo';
+        window.scrollTo(0, 0);
+      }
+      state.jogo.id = jogoId;
+    } else {
+      state.tab = `lib-${LIB_PAGES.includes(id) ? id : 'chave'}`;
+      document.title = 'Libertadores · Painel';
+    }
+  } else if (page === 'time' && Number(id)) {
     state.tab = 'time';
     state.teamId = Number(id);
     window.scrollTo(0, 0);
@@ -1971,12 +2142,17 @@ function applyRoute() {
     state.playerId = Number(id);
     state.compareId = Number(vsId) || null;
   } else {
-    state.tab = loaders[page] && !['time', 'jogador', 'jogo'].includes(page) ? page : 'tabela';
+    state.tab = loaders[page] && !['time', 'jogador', 'jogo'].includes(page) && !page.startsWith('lib') ? page : 'tabela';
     document.title = 'Painel do Brasileirão';
   }
   // Na página de um jogo, o jogo em destaque do topo só atrapalharia
   document.body.dataset.tab = state.tab;
-  const activeTab = state.tab === 'jogador' ? 'scout' : state.tab === 'jogo' ? 'jogos' : state.tab;
+  // Cores, abas e nome mudam conforme o campeonato
+  document.body.dataset.comp = state.comp;
+  $('#brand-nome').textContent = state.comp === 'lib' ? 'Libertadores' : 'Brasileirão';
+  document.querySelectorAll('.comp-card').forEach((c) => c.classList.toggle('on', c.dataset.comp === state.comp));
+  let activeTab = state.tab === 'jogador' ? 'scout' : state.tab === 'jogo' ? 'jogos' : state.tab;
+  if (state.comp === 'lib') activeTab = state.tab === 'jogo' ? 'lib/jogos' : state.tab.replace('lib-', 'lib/');
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === activeTab));
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === state.tab));
   refresh();
@@ -1992,7 +2168,7 @@ window.addEventListener('hashchange', applyRoute);
 document.addEventListener('click', (e) => {
   const card = e.target.closest('[data-jogo]');
   if (!card || e.target.closest('a, button')) return;
-  location.hash = `#/jogo/${card.dataset.jogo}`;
+  location.hash = jogoHref(card.dataset.jogo);
 });
 
 $('#prev-round').addEventListener('click', () => {

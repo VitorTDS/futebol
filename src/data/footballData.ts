@@ -13,8 +13,8 @@ const LIVE_TTL_MS = 15_000;
 const CACHE_DIR = path.join(import.meta.dirname, '..', '..', 'data', 'cache');
 
 interface ApiTeam {
-  id: number;
-  name: string;
+  id: number | null;
+  name: string | null;
   shortName: string | null;
   tla: string | null;
   crest: string | null;
@@ -22,13 +22,18 @@ interface ApiTeam {
 
 interface ApiMatch {
   id: number;
-  matchday: number;
+  matchday: number | null;
+  stage?: string;
+  group?: string | null;
   utcDate: string;
   status: string;
   minute?: number | string | null;
   homeTeam: ApiTeam;
   awayTeam: ApiTeam;
-  score: { fullTime: { home: number | null; away: number | null } };
+  score: {
+    fullTime: { home: number | null; away: number | null };
+    penalties?: { home: number | null; away: number | null } | null;
+  };
 }
 
 interface ApiScorer {
@@ -55,7 +60,9 @@ export function fixTeam(t: Team): Team {
   return { ...t, ...TEAM_FIXES[t.id] };
 }
 
-function toTeam(t: ApiTeam): Team {
+function toTeam(t: ApiTeam, placeholderId: number): Team {
+  // Vaga de mata-mata ainda sem dono: a API manda o time todo como null
+  if (t.id == null || !t.name) return { id: placeholderId, name: 'A definir', shortName: 'A definir', tla: '?', tbd: true };
   return fixTeam({
     id: t.id,
     name: t.name,
@@ -98,19 +105,26 @@ export function createFootballDataProvider(opts: {
       if (['POSTPONED', 'SUSPENDED', 'CANCELLED'].includes(m.status)) inactive.add(m.id);
       else inactive.delete(m.id);
     }
-    return data.matches.map(
-      (m): Match => ({
+    return data.matches.map((m): Match => {
+      // Em disputa de pênaltis, a API soma os pênaltis ao placar: separa os dois
+      const pen = m.score.penalties;
+      const penalties: [number, number] | null = pen?.home != null && pen.away != null ? [pen.home, pen.away] : null;
+      const goals = (v: number | null, p: number | undefined) => (v == null ? null : v - (p ?? 0));
+      return {
         id: m.id,
-        matchday: m.matchday,
+        matchday: m.matchday ?? 0,
         utcDate: m.utcDate,
         status: toStatus(m.status),
-        home: toTeam(m.homeTeam),
-        away: toTeam(m.awayTeam),
-        homeGoals: m.score.fullTime.home,
-        awayGoals: m.score.fullTime.away,
+        home: toTeam(m.homeTeam, -m.id * 10 - 1),
+        away: toTeam(m.awayTeam, -m.id * 10 - 2),
+        homeGoals: goals(m.score.fullTime.home, penalties?.[0]),
+        awayGoals: goals(m.score.fullTime.away, penalties?.[1]),
         minute: m.minute != null ? Number(m.minute) || null : null,
-      }),
-    );
+        stage: m.stage,
+        group: m.group ?? null,
+        penalties,
+      };
+    });
   }
 
   /** Temporada já encerrada não muda: busca uma vez e guarda em disco para sempre. */
@@ -171,7 +185,7 @@ export function createFootballDataProvider(opts: {
   }
 
   const getMatches = () =>
-    cached('matches', matchTime ? LIVE_TTL_MS : TTL_MS, async () => {
+    cached(`matches-${opts.competition}`, matchTime ? LIVE_TTL_MS : TTL_MS, async () => {
       const matches = await currentMatches();
       matchTime = isMatchTime(matches);
       return matches;
@@ -192,14 +206,14 @@ export function createFootballDataProvider(opts: {
     },
 
     getScorers: () =>
-      cached('scorers', TTL_MS, async () => {
+      cached(`scorers-${opts.competition}`, TTL_MS, async () => {
         const data = await get<{ scorers: ApiScorer[] }>(
           `/competitions/${opts.competition}/scorers?limit=30`,
         );
         return data.scorers.map(
           (s): Scorer => ({
             player: s.player.name,
-            team: toTeam(s.team),
+            team: toTeam(s.team, 0),
             goals: s.goals,
             assists: s.assists,
             penalties: s.penalties,

@@ -33,7 +33,8 @@ export function keepFinished(matches: Match[], memory: Map<number, Match>): { ma
 export function staleMatchdays(matches: Match[], inactive: Set<number>, now = Date.now()): number[] {
   const rounds = new Set<number>();
   for (const m of matches) {
-    if (m.status === 'FINISHED' || inactive.has(m.id)) continue;
+    // matchday 0 = jogo de mata-mata (sem rodada): não dá para rebuscar por rodada
+    if (m.status === 'FINISHED' || inactive.has(m.id) || !m.matchday) continue;
     if (Date.parse(m.utcDate) < now - STALE_AFTER_MS) rounds.add(m.matchday);
   }
   return [...rounds].sort((a, b) => a - b);

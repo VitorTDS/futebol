@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { normalizeSummary } from '../src/data/espn.ts';
+import { nameTokens, normalizeSummary } from '../src/data/espn.ts';
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 
@@ -53,4 +53,13 @@ test('confronto direto diz qual dos dois times venceu cada jogo', () => {
   assert.equal(g.winner, 'away');
   const draw = botCha.h2h.find((x) => x.homeScore === x.awayScore);
   if (draw) assert.equal(draw.winner, null);
+});
+
+test('nomes de times estrangeiros batem entre football-data e ESPN', () => {
+  const share = (x: string[], y: string[]) => [...nameTokens(...x)].some((t) => nameTokens(...y).has(t));
+  assert.ok(share(['Estudiantes de La Plata', 'Estudiantes LP'], ['Estudiantes de La Plata']));
+  assert.ok(share(['Liga Deportiva Universitaria de Quito', 'LDU de Quito'], ['LDU Quito']));
+  assert.ok(share(['Club Deportivo Universidad Católica', 'Univ Católica'], ['Universidad Católica']));
+  assert.ok(!share(['Boca Juniors'], ['River Plate']));
+  assert.deepEqual([...nameTokens('São Paulo FC')], ['sao', 'paulo']);
 });

@@ -6,6 +6,8 @@ export interface Team {
   shortName: string;
   tla: string;
   crest?: string;
+  /** Vaga ainda sem dono (ex.: final da Libertadores antes das semifinais) */
+  tbd?: boolean;
 }
 
 export interface Match {
@@ -18,6 +20,10 @@ export interface Match {
   homeGoals: number | null;
   awayGoals: number | null;
   minute?: number | null;
+  /** Copas: fase (GROUP_STAGE, QUARTER_FINALS...), grupo e disputa de pênaltis */
+  stage?: string;
+  group?: string | null;
+  penalties?: [number, number] | null;
 }
 
 export interface Scorer {

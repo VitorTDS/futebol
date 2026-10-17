@@ -16,6 +16,7 @@ import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026 } from './data/copas.ts';
 import { getMatchCenter } from './data/espn.ts';
+import { libertadores } from './libertadores.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
@@ -693,6 +694,8 @@ app.get(
     res.json({ source: provider.name, scorers: await provider.getScorers() });
   }),
 );
+
+app.use('/api/lib', libertadores);
 
 // ---------- Ao vivo: avisa as páginas abertas assim que um placar muda ----------
 

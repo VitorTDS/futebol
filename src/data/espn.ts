@@ -6,7 +6,10 @@ import path from 'node:path';
 import { cached } from './cache.ts';
 import type { Match } from '../types.ts';
 
-const BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/bra.1';
+const BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+
+/** Campeonato na ESPN: Brasileirão ou Libertadores */
+export type EspnLeague = 'bra.1' | 'conmebol.libertadores';
 const CACHE_DIR = path.join(import.meta.dirname, '..', '..', 'data', 'cache', 'espn');
 
 /** id do time na football-data.org → id na ESPN */
@@ -105,8 +108,8 @@ export interface MatchCenter {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
 
-async function get(apiPath: string): Promise<Json> {
-  const res = await fetch(BASE_URL + apiPath, { signal: AbortSignal.timeout(10_000) });
+async function get(league: EspnLeague, apiPath: string): Promise<Json> {
+  const res = await fetch(`${BASE_URL}/${league}${apiPath}`, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`ESPN respondeu ${res.status}`);
   return res.json();
 }
@@ -114,23 +117,47 @@ async function get(apiPath: string): Promise<Json> {
 /** "2026-10-17" → "20261017" */
 const ymd = (d: Date) => d.toISOString().slice(0, 10).replaceAll('-', '');
 
-function scoreboard(date: string): Promise<Json> {
+function scoreboard(league: EspnLeague, date: string): Promise<Json> {
   const past = date < ymd(new Date(Date.now() - 2 * 86_400_000));
-  return cached(`espn-scoreboard-${date}`, past ? 86_400_000 : 10 * 60_000, () => get(`/scoreboard?dates=${date}`));
+  return cached(`espn-scoreboard-${league}-${date}`, past ? 86_400_000 : 10 * 60_000, () => get(league, `/scoreboard?dates=${date}`));
 }
 
-/** Acha o jogo correspondente na ESPN (mesmos times, mesmo dia). */
-export async function findEspnEvent(match: Match): Promise<string | null> {
-  const home = ESPN_TEAMS[match.home.id];
-  const away = ESPN_TEAMS[match.away.id];
-  if (!home || !away) return null;
+const STOPWORDS = new Set(['fc', 'cf', 'club', 'clube', 'de', 'del', 'da', 'do', 'la', 'el', 'sc', 'ac', 'ca', 'cd', 'cr', 'ec', 'se', 'cs', 'fbc', 'afc', 'sa']);
+
+/** Palavras que identificam um time: "CS Independiente Rivadavia" → independiente, rivadavia */
+export function nameTokens(...names: (string | undefined | null)[]): Set<string> {
+  const tokens = new Set<string>();
+  for (const n of names) {
+    // Tira acentos (separa a letra do acento e apaga o acento)
+    for (const w of (n ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/)) {
+      if (w.length > 1 && !STOPWORDS.has(w)) tokens.add(w);
+    }
+  }
+  return tokens;
+}
+
+function sameTeam(ours: Match['home'], espnTeam: Json): boolean {
+  const mapped = ESPN_TEAMS[ours.id];
+  if (mapped) return String(espnTeam?.id) === mapped;
+  const theirs = nameTokens(espnTeam?.displayName, espnTeam?.shortDisplayName, espnTeam?.name, espnTeam?.location);
+  return [...nameTokens(ours.name, ours.shortName)].some((t) => theirs.has(t));
+}
+
+/**
+ * Acha o jogo correspondente na ESPN (mesmos times, mesmo dia) e o id do
+ * mandante lá. Times brasileiros vão pelo id; os outros, pelo nome.
+ */
+export async function findEspnEvent(match: Match, league: EspnLeague = 'bra.1'): Promise<{ eventId: string; homeEspnId: string } | null> {
+  if (match.home.tbd || match.away.tbd) return null;
   // A ESPN agrupa os jogos pelo dia no fuso dos EUA: procura no dia em UTC e no anterior
   const kickoff = new Date(match.utcDate);
   for (const date of new Set([ymd(kickoff), ymd(new Date(kickoff.getTime() - 86_400_000))])) {
-    const board = await scoreboard(date);
+    const board = await scoreboard(league, date);
     for (const ev of board.events ?? []) {
-      const ids = (ev.competitions?.[0]?.competitors ?? []).map((c: Json) => c.team?.id);
-      if (ids.includes(home) && ids.includes(away)) return String(ev.id);
+      const competitors: Json[] = ev.competitions?.[0]?.competitors ?? [];
+      const home = competitors.find((c) => sameTeam(match.home, c.team));
+      const away = competitors.find((c) => c !== home && sameTeam(match.away, c.team));
+      if (home && away) return { eventId: String(ev.id), homeEspnId: String(home.team.id) };
     }
   }
   return null;
@@ -320,7 +347,7 @@ export function normalizeSummary(eventId: string, s: Json, homeEspnId: string): 
 }
 
 /** Resumo de um jogo terminado não muda mais: fica guardado em disco. */
-async function summary(eventId: string, match: Match): Promise<Json> {
+async function summary(league: EspnLeague, eventId: string, match: Match): Promise<Json> {
   const file = path.join(CACHE_DIR, `${eventId}.json`);
   if (match.status === 'FINISHED') {
     try {
@@ -331,7 +358,7 @@ async function summary(eventId: string, match: Match): Promise<Json> {
   }
   const soon = Math.abs(Date.parse(match.utcDate) - Date.now()) < 3 * 3_600_000;
   const ttl = match.status === 'LIVE' ? 30_000 : soon ? 2 * 60_000 : 10 * 60_000;
-  const data = await cached(`espn-summary-${eventId}`, ttl, () => get(`/summary?event=${eventId}`));
+  const data = await cached(`espn-summary-${eventId}`, ttl, () => get(league, `/summary?event=${eventId}`));
   if (match.status === 'FINISHED' && data.header?.competitions?.[0]?.status?.type?.completed) {
     await mkdir(CACHE_DIR, { recursive: true });
     await writeFile(file, JSON.stringify(data));
@@ -339,8 +366,8 @@ async function summary(eventId: string, match: Match): Promise<Json> {
   return data;
 }
 
-export async function getMatchCenter(match: Match): Promise<MatchCenter | null> {
-  const eventId = await findEspnEvent(match);
-  if (!eventId) return null;
-  return normalizeSummary(eventId, await summary(eventId, match), ESPN_TEAMS[match.home.id]);
+export async function getMatchCenter(match: Match, league: EspnLeague = 'bra.1'): Promise<MatchCenter | null> {
+  const found = await findEspnEvent(match, league);
+  if (!found) return null;
+  return normalizeSummary(found.eventId, await summary(league, found.eventId, match), found.homeEspnId);
 }

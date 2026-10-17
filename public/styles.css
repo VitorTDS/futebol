@@ -376,6 +376,73 @@ body[data-tab="jogo"] .destaque { display: none; }
 .ultimos-j img, .ultimos-j .badge { width: 18px; height: 18px; object-fit: contain; }
 .mini-tab tr.destaque-t td { background: #fff4c2; font-weight: 800; }
 
+/* Troca de campeonato */
+.comp-switch { display: flex; gap: 8px; }
+.comp-card {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 12px; text-decoration: none; color: var(--giz-mute);
+  background: rgba(0, 0, 0, 0.25); border: 1.5px solid rgba(241, 245, 234, 0.25); transition: transform 0.15s, background 0.2s, color 0.2s;
+}
+.comp-card:hover { transform: translateY(-2px); color: var(--giz); }
+.comp-card .ico { display: block; width: 22px; height: 22px; }
+.comp-card span { display: flex; flex-direction: column; line-height: 1.1; }
+.comp-card b { font-family: "Archivo Black"; text-transform: uppercase; font-size: 13px; letter-spacing: 0.02em; }
+.comp-card small { font-size: 11px; opacity: 0.8; }
+.comp-card.on { background: var(--amarelo); color: var(--tinta); border-color: var(--amarelo); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+
+/* Só aparecem as abas do campeonato aberto */
+body[data-comp="lib"] .bsa-tab, body:not([data-comp="lib"]) .lib-tab { display: none !important; }
+
+/* Libertadores: azul-marinho e dourado, as cores da taça */
+body[data-comp="lib"] {
+  --lousa: #0b1f45;
+  --lousa-2: #102a5a;
+  --amarelo: #d9b44a;
+  --madeira: #6f5420;
+  --verde: #1f7a4d;
+  --giz-mute: #b6c2dc;
+}
+body[data-comp="lib"] .hero::before { background: linear-gradient(90deg, #d9b44a 0 50%, #0b1f45 50% 52%, #d9b44a 52%); }
+body[data-comp="lib"] .hero { box-shadow: 0 6px 0 #4f3b15; }
+
+/* Chaveamento */
+.bracket { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 14px; overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x mandatory; }
+.fase-col { display: flex; flex-direction: column; gap: 8px; scroll-snap-align: start; }
+.fase-ties { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 10px; }
+.fase-col h3 { margin: 0 0 4px; font-size: 14px; text-align: center; }
+.tie { background: #fff; border-radius: 12px; padding: 8px 10px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.08); border-left: 4px solid var(--amarelo); }
+.tie.decidido { border-left-color: var(--papel-2); }
+.tt { display: grid; grid-template-columns: 22px 1fr auto auto; align-items: center; gap: 6px; padding: 4px 0; font-size: 13px; color: var(--muted); }
+.tt img, .tt .badge { width: 22px; height: 22px; object-fit: contain; }
+.tt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt b { font-family: "Archivo Black"; color: var(--text); min-width: 14px; text-align: right; }
+.tt.passou { color: var(--text); font-weight: 800; }
+.tie:not(.decidido) .tt { color: var(--text); font-weight: 700; }
+.tt.tbd { color: var(--muted); font-style: italic; }
+.chance-t { font-size: 11px; font-weight: 800; color: var(--verde); }
+.pernas { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; border-top: 1px dotted #e2dccb; padding-top: 4px; }
+.perna { font-size: 11px; color: var(--muted); text-decoration: none; }
+.perna:hover { color: var(--text); text-decoration: underline; }
+.provaveis { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-top: 4px; }
+.provaveis span { display: flex; align-items: center; gap: 6px; }
+.provaveis img { width: 16px; height: 16px; object-fit: contain; }
+
+/* Jogos por fase */
+.fases { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 12px; scrollbar-width: none; }
+.fases::-webkit-scrollbar { display: none; }
+.fases button {
+  flex: 0 0 auto; font: inherit; font-weight: 800; font-size: 13px; padding: 8px 14px; min-height: 40px; border-radius: 999px; cursor: pointer;
+  background: #fff; color: var(--text); border: 2px solid var(--tinta);
+}
+.fases button.on { background: var(--amarelo); box-shadow: 0 3px 0 var(--tinta); }
+
+/* Grupos */
+.grupos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+.grupo .form a, .grupo .form span { width: 16px; height: 16px; font-size: 9px; }
+.grupo th, .grupo td { padding: 7px 5px; }
+.grupo h3 { margin: 0 0 8px; font-size: 16px; }
+
+.jh-tie { margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--amarelo); }
+
 /* Alertas de gol */
 .topo { position: relative; padding-right: 84px; }
 .bell {
@@ -640,6 +707,11 @@ td.metric { font-variant-numeric: tabular-nums; }
   .jogo-tabs button { font-size: 13px; padding: 8px 12px; }
   .standings .form { gap: 4px; }
   .standings .form a, .standings .form span { width: 24px; height: 24px; font-size: 11px; }
+  .comp-switch { order: 3; width: 100%; }
+  .comp-card { flex: 1; justify-content: center; padding: 6px 8px; }
+  .comp-card small { display: none; }
+  .bracket { grid-auto-columns: 82%; margin: 0 -16px; padding: 4px 16px 12px; }
+  .grupos-grid { grid-template-columns: 1fr; }
   .ese-grid { grid-template-columns: 1fr; }
   .ese-focus { grid-template-columns: repeat(2, 1fr); }
   .ese-meu { grid-column: 1 / -1; flex-direction: row; }
