@@ -1,11 +1,14 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cached } from './cache.ts';
+import { isMatchTime } from '../model/liveEvents.ts';
 import type { DataProvider, Match, MatchStatus, Scorer, Team } from '../types.ts';
 
 const BASE_URL = 'https://api.football-data.org/v4';
-// Plano grátis: 10 requisições por minuto
+// Plano grátis: 10 requisições por minuto. Em hora de jogo os placares são
+// buscados a cada 15 s (4 por minuto), fora dela a cada minuto.
 const TTL_MS = 60_000;
+const LIVE_TTL_MS = 15_000;
 const CACHE_DIR = path.join(import.meta.dirname, '..', '..', 'data', 'cache');
 
 interface ApiTeam {
@@ -118,7 +121,13 @@ export function createFootballDataProvider(opts: {
     return matches;
   }
 
-  const getMatches = () => cached('matches', TTL_MS, () => fetchMatches());
+  let matchTime = false;
+  const getMatches = () =>
+    cached('matches', matchTime ? LIVE_TTL_MS : TTL_MS, async () => {
+      const matches = await fetchMatches();
+      matchTime = isMatchTime(matches);
+      return matches;
+    });
 
   return {
     name: 'football-data.org',

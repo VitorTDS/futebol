@@ -1286,5 +1286,26 @@ $('#history-next').addEventListener('click', () => {
   refresh();
 });
 
+// ---------- Ao vivo ----------
+
+// O servidor avisa na hora quando um placar muda; o setInterval fica só de reserva.
+const liveHandlers = [];
+
+function connectLive() {
+  if (!window.EventSource) return;
+  const es = new EventSource('/api/stream');
+  es.addEventListener('update', (e) => {
+    const { events } = JSON.parse(e.data);
+    refresh();
+    for (const handle of liveHandlers) handle(events);
+  });
+}
+
+// No celular a página "dorme" em segundo plano: ao voltar, atualiza na hora.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refresh();
+});
+
 applyRoute();
+connectLive();
 setInterval(refresh, REFRESH_MS);

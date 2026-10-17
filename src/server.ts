@@ -11,6 +11,7 @@ import { buildBackground, fitModel, MODEL_KINDS, type Background } from './model
 import { MODEL_LABELS, predictMatch, type FittedModel, type ModelKind } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { createCupSimulator } from './model/cups.ts';
+import { isMatchTime, liveEvents } from './model/liveEvents.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026 } from './data/copas.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
@@ -553,6 +554,51 @@ app.get(
   }),
 );
 
+// ---------- Ao vivo: avisa as páginas abertas assim que um placar muda ----------
+
+const streams = new Set<Response>();
+
+function broadcast(event: string, data: unknown) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of streams) res.write(msg);
+}
+
+app.get('/api/stream', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  res.flushHeaders();
+  res.write('retry: 5000\n\n');
+  streams.add(res);
+  // Comentário a cada 25 s para a conexão não cair por inatividade (proxies, celular)
+  const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
+  req.on('close', () => {
+    clearInterval(ping);
+    streams.delete(res);
+  });
+});
+
+let lastMatches: Match[] | null = null;
+
+/** Lê os placares de tempos em tempos e manda gols, inícios e fins de jogo para as páginas. */
+async function watchLive() {
+  let delay = 60_000;
+  try {
+    const matches = await provider.getMatches();
+    if (lastMatches) {
+      const events = liveEvents(lastMatches, matches);
+      const changed = matches.some((m, i) => {
+        const o = lastMatches![i];
+        return !o || o.id !== m.id || o.status !== m.status || o.homeGoals !== m.homeGoals || o.awayGoals !== m.awayGoals || o.minute !== m.minute;
+      });
+      if (changed) broadcast('update', { events });
+    }
+    lastMatches = matches;
+    if (isMatchTime(matches)) delay = 15_000;
+  } catch (err) {
+    console.error('Falha ao atualizar os placares:', (err as Error).message);
+  }
+  setTimeout(watchLive, delay);
+}
+
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
   res.status(502).json({ error: err.message });
@@ -562,5 +608,6 @@ app.listen(config.port, () => {
   console.log(`⚽ Dashboard rodando em http://localhost:${config.port}`);
   console.log(`   Fonte de dados: ${provider.name} · modelo: ${MODEL_LABELS[config.model]}`);
   getAnalysis().catch(() => {}); // já começa a calcular (e a calibrar) sem esperar a primeira visita
+  watchLive();
   if (!config.footballDataToken) console.log('   (crie um arquivo .env com FOOTBALL_DATA_TOKEN para usar dados reais)');
 });
