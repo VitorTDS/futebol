@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Abra http://localhost:3000.
+Abra http://localhost:3001.
 
 Sem configurar nada, o sistema usa **dados de exemplo** (um campeonato com
 resultados sorteados), para você ver tudo funcionando.

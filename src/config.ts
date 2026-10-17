@@ -11,7 +11,7 @@ function parseTimeDecay(value: string | undefined): number | 'auto' {
 }
 
 export const config = {
-  port: Number(process.env.PORT || 3000),
+  port: Number(process.env.PORT || 3001),
   footballDataToken: process.env.FOOTBALL_DATA_TOKEN || '',
   competition: process.env.COMPETITION || 'BSA',
   season: process.env.SEASON || undefined,
