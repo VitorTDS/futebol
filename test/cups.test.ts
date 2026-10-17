@@ -54,6 +54,21 @@ test('mesmo clube campeão de duas copas: a vaga extra desce', () => {
   assert.equal(s.libertadoresCutoff, 7);
 });
 
+test('copa com chances de título sorteia o campeão nessas proporções', () => {
+  const model: FittedModel = { kind: 'poisson', rho: 0, expectedGoals: () => ({ home: 1.3, away: 1.1 }) };
+  const cups: ContinentalCups = {
+    copaDoBrasil: { name: 'CdB', decided: { champion: 1, runnerUp: 2 } },
+    libertadores: { name: 'Lib', odds: [{ champion: 3, p: 0.7 }, { champion: 'Estudiantes', p: 0.3 }] },
+    sulamericana: { name: 'Sula', decided: { champion: 'Boca Juniors', runnerUp: 4 } },
+  };
+  const run = createCupSimulator(model, [1, 2, 3, 4], cups);
+  const rng = mulberry32(7);
+  let br = 0;
+  const n = 20000;
+  for (let i = 0; i < n; i++) if (run(rng).libertadores.champion === 3) br++;
+  assert.ok(Math.abs(br / n - 0.7) < 0.02, `${br / n}`);
+});
+
 test('simulador das copas respeita confronto já decidido e placar de ida', () => {
   const model: FittedModel = { kind: 'poisson', rho: 0, expectedGoals: () => ({ home: 1.3, away: 1.1 }) };
   const cups: ContinentalCups = {

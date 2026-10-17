@@ -91,6 +91,19 @@ async function getAnalysis(): Promise<Analysis> {
   return value;
 }
 
+/**
+ * Chance de título de cada clube, para as vagas do Brasileirão. Clube da Série A
+ * vai pelo id (`brazilIds`); estrangeiro vai pelo nome, porque não dá vaga pelo Brasil.
+ */
+export async function libertadoresOdds(brazilIds: Set<number>): Promise<{ updatedAt: string; odds: { champion: number | string; p: number }[] }> {
+  const a = await getAnalysis();
+  const byId = new Map(a.teams.map((t) => [t.id, t]));
+  const odds = [...a.knockout.champion]
+    .filter(([, p]) => p > 0)
+    .map(([id, p]) => ({ champion: brazilIds.has(id) ? id : (byId.get(id)?.name ?? `time ${id}`), p }));
+  return { updatedAt: a.updatedAt, odds };
+}
+
 const route = (fn: (req: Request, res: Response) => Promise<void>) => (req: Request, res: Response, next: NextFunction) =>
   fn(req, res).catch(next);
 

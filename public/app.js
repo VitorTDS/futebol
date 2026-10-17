@@ -177,6 +177,7 @@ function renderZoneNote(z) {
       .join('');
   el.innerHTML = `<b>Vagas mudam com as copas.</b> O Brasileirão dá 5 vagas na Libertadores, mas o campeão e o vice da Copa do Brasil
     e os campeões brasileiros da Libertadores e da Sul-Americana também se classificam. Quando quem ganha já está no G5, a vaga desce na tabela.
+    ${z.libertadoresSource === 'simulacao' ? 'A chance de cada time ganhar a Libertadores é a mesma da <a href="#/lib/chave">aba Libertadores</a>.' : ''}
     <span class="dist"><span class="muted">Libertadores pela tabela:</span> ${dist(z.libertadoresCutoff)}</span>
     <span class="dist"><span class="muted">Sul-Americana:</span> ${dist(z.sulamericanaCutoff)}</span>`;
 }

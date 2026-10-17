@@ -32,6 +32,11 @@ export interface Cup {
   finalNeutral?: boolean;
   /** Quando a copa já acabou */
   decided?: { champion: Side; runnerUp: Side };
+  /**
+   * Chance de título de cada clube, vinda de uma simulação própria da copa
+   * (a Libertadores usa a da aba Libertadores). Tem prioridade sobre `semifinals`.
+   */
+  odds?: { champion: Side; p: number }[];
 }
 
 export interface ContinentalCups {

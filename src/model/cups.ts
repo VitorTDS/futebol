@@ -114,6 +114,13 @@ export function createCupSimulator(model: FittedModel, leagueTeamIds: number[], 
 
   function runCup(cup: Cup, rng: Rng): CupResult {
     if (cup.decided) return cup.decided;
+    if (cup.odds?.length) {
+      // Só o campeão sai das chances: o vice da Libertadores e da Sul-Americana não dá vaga
+      const u = rng();
+      let acc = 0;
+      const champion = (cup.odds.find((o) => (acc += o.p) >= u) ?? cup.odds.at(-1)!).champion;
+      return { champion, runnerUp: '' };
+    }
     if (!cup.semifinals) throw new Error(`${cup.name}: falta "semifinals" ou "decided"`);
     const s1 = tie(cup.semifinals[0], false, rng).winner;
     const s2 = tie(cup.semifinals[1], false, rng).winner;

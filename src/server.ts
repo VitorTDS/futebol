@@ -14,9 +14,9 @@ import { createCupSimulator } from './model/cups.ts';
 import { isMatchTime, liveEvents } from './model/liveEvents.ts';
 import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
-import { CUPS_2026 } from './data/copas.ts';
+import { CUPS_2026, type ContinentalCups } from './data/copas.ts';
 import { getMatchCenter } from './data/espn.ts';
-import { libertadores } from './libertadores.ts';
+import { libertadores, libertadoresOdds } from './libertadores.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
@@ -46,8 +46,10 @@ interface Analysis {
   ratings: Map<number, Ratings>;
   outlook: Map<number, TeamOutlook>;
   zones: ZoneOutlook;
-  /** Se as vagas extras das copas entraram na conta */
-  withCups: boolean;
+  /** Copas que dão vaga extra (null: vale só a tabela) */
+  cups: ContinentalCups | null;
+  /** De onde veio a chance de título da Libertadores */
+  libertadoresSource: 'simulacao' | 'semifinais' | null;
   /** Histórico de acertos de cada modelo (para comparar) */
   history: Record<ModelKind, BacktestResult>;
   calibration: CalibrationState;
@@ -219,11 +221,26 @@ function cupsApply(matches: Match[]): boolean {
   return provider.name === 'football-data.org' && config.competition === 'BSA' && season === 2026;
 }
 
+/**
+ * Situação das copas para as vagas. A Libertadores usa a mesma simulação da aba
+ * Libertadores (chaveamento real e modelo próprio); se ela falhar, volta para as
+ * semifinais escritas à mão em copas.ts.
+ */
+async function currentCups(teams: Team[]): Promise<{ cups: ContinentalCups; source: 'simulacao' | 'semifinais'; key: string }> {
+  try {
+    const lib = await libertadoresOdds(new Set(teams.map((t) => t.id)));
+    return { cups: { ...CUPS_2026, libertadores: { ...CUPS_2026.libertadores, odds: lib.odds } }, source: 'simulacao', key: lib.updatedAt };
+  } catch (err) {
+    console.warn('Vagas: sem a simulação da Libertadores, usando as semifinais de copas.ts:', (err as Error).message);
+    return { cups: CUPS_2026, source: 'semifinais', key: 'manual' };
+  }
+}
+
 function runSimulation(
   teams: Team[],
   matches: Match[],
   model: FittedModel,
-  withCups: boolean,
+  cups: ContinentalCups | null,
   runs: number,
   seed = Date.now(),
   forced?: Map<number, [number, number]>,
@@ -233,23 +250,26 @@ function runSimulation(
     zones: config.zones,
     rng: mulberry32(seed),
     forced,
-    cups: withCups ? createCupSimulator(model, teams.map((t) => t.id), CUPS_2026) : undefined,
+    cups: cups ? createCupSimulator(model, teams.map((t) => t.id), cups) : undefined,
   });
 }
 
 /** Recalcula tabela, modelo e simulação só quando algum placar muda. */
 async function getAnalysis(): Promise<Analysis> {
   const matches = await provider.getMatches();
-  const key = matches.map((m) => `${m.id}:${m.status}:${m.homeGoals}-${m.awayGoals}:${m.minute ?? ''}`).join('|');
+  const teams = teamsFrom(matches);
+  // A Libertadores entra na chave: quando a chance de título muda, as vagas mudam junto
+  const cupState = cupsApply(matches) ? await currentCups(teams) : null;
+  const key =
+    matches.map((m) => `${m.id}:${m.status}:${m.homeGoals}-${m.awayGoals}:${m.minute ?? ''}`).join('|') + `#${cupState?.key ?? ''}`;
   if (lastAnalysis?.key === key) return lastAnalysis.value;
 
-  const teams = teamsFrom(matches);
   const bg = await getBackground(teams);
   const calib = currentCalibration(teams, matches, bg.background);
   const model = fitModel(config.model, teams, matches, new Date().toISOString(), calib.decay, bg.background);
   const history = getHistory(teams, matches, calib, bg.background);
-  const withCups = cupsApply(matches);
-  const outlook = runSimulation(teams, matches, model, withCups, config.simulations);
+  const cups = cupState?.cups ?? null;
+  const outlook = runSimulation(teams, matches, model, cups, config.simulations);
   const matchdays = matches.map((m) => m.matchday);
 
   const value: Analysis = {
@@ -260,7 +280,8 @@ async function getAnalysis(): Promise<Analysis> {
     ratings: ratings(model, teams),
     outlook: new Map(outlook.teams.map((o) => [o.teamId, o])),
     zones: outlook.zones,
-    withCups,
+    cups,
+    libertadoresSource: cupState?.source ?? null,
     history: history.byModel,
     historyWithoutBackground: history.withoutBackground,
     calibration: calib,
@@ -292,7 +313,7 @@ app.get(
       updatedAt: a.updatedAt,
       simulations: config.simulations,
       zones: a.zones.likely,
-      zoneOutlook: { ...a.zones, withCups: a.withCups },
+      zoneOutlook: { ...a.zones, withCups: !!a.cups, libertadoresSource: a.libertadoresSource },
       currentMatchday: a.currentMatchday,
       totalMatchdays: a.totalMatchdays,
       standings: a.standings.map((row) => ({ ...row, outlook: a.outlook.get(row.team.id) })),
@@ -329,7 +350,7 @@ let whatifBase: { analysis: Analysis; teams: TeamOutlook[] } | null = null;
 
 function whatifBaseline(a: Analysis): TeamOutlook[] {
   if (whatifBase?.analysis !== a) {
-    whatifBase = { analysis: a, teams: runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED).teams };
+    whatifBase = { analysis: a, teams: runSimulation(a.teams, a.matches, a.model, a.cups, WHATIF_RUNS, WHATIF_SEED).teams };
   }
   return whatifBase.teams;
 }
@@ -357,7 +378,7 @@ app.post(
     const a = await getAnalysis();
     const forced = pickedScores(a.matches, req.body?.picks ?? {});
     // O modelo (força dos times) fica o mesmo: só os resultados escolhidos mudam
-    const outlook = runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED, forced);
+    const outlook = runSimulation(a.teams, a.matches, a.model, a.cups, WHATIF_RUNS, WHATIF_SEED, forced);
     res.json({ runs: WHATIF_RUNS, teams: outlook.teams, base: whatifBaseline(a), zones: outlook.zones.likely });
   }),
 );
@@ -375,7 +396,7 @@ function matchStakes(a: Analysis, m: Match): Record<Pick, TeamOutlook[]> {
     for (const pick of ['H', 'D', 'A'] as Pick[]) {
       const r = applyPick(m, pick);
       const forced = new Map([[m.id, [r.homeGoals!, r.awayGoals!] as [number, number]]]);
-      value[pick] = runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED, forced).teams;
+      value[pick] = runSimulation(a.teams, a.matches, a.model, a.cups, WHATIF_RUNS, WHATIF_SEED, forced).teams;
     }
     if (stakesCache.size > 50) stakesCache.clear();
     stakesCache.set(key, value);
