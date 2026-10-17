@@ -53,3 +53,13 @@ test('rodada atual: primeira com metade ou mais dos jogos pendentes', () => {
 test('rodada atual com o campeonato encerrado é a última', () => {
   assert.equal(currentMatchday([match(1, a, b, [1, 0]), match(2, b, a, [0, 0])]), 2);
 });
+
+test('cada letra da forma recente aponta para o jogo em que aconteceu', () => {
+  const g1 = match(1, a, b, [2, 0]);
+  const g2 = match(2, b, a, [1, 1]);
+  const rows = computeStandings([a, b], [g1, g2]);
+  const ra = rows.find((r) => r.team.id === a.id)!;
+  assert.deepEqual(ra.form, ['V', 'E']);
+  assert.deepEqual(ra.formMatches.map((f) => f.id), [g1.id, g2.id]);
+  assert.equal(ra.formMatches[0].score, 'T1 2×0 T2');
+});

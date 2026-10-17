@@ -84,6 +84,14 @@ function showBanner(text, isError = false) {
 
 // ---------- Classificação ----------
 
+const RESULT_LABEL = { V: 'Vitória', E: 'Empate', D: 'Derrota' };
+
+// Letra da forma recente (V/E/D) que abre a partida em que aconteceu
+function formLink(result, game) {
+  if (!game) return `<span class="${result}">${result}</span>`;
+  return `<a class="${result}" href="#/jogo/${game.id}" title="${RESULT_LABEL[result]}: ${escapeHtml(game.score)}" aria-label="${RESULT_LABEL[result]}: ${escapeHtml(game.score)}">${result}</a>`;
+}
+
 // Linha de informações no topo; aparece em qualquer aba.
 function setMeta(data) {
   const updated = new Date(data.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -129,7 +137,7 @@ async function loadOverview() {
         <td class="hide-sm">${row.drawn}</td>
         <td class="hide-sm">${row.lost}</td>
         <td>${row.goalDiff > 0 ? '+' : ''}${row.goalDiff}</td>
-        <td class="hide-sm"><span class="form">${row.form.map((r) => `<span class="${r}">${r}</span>`).join('')}</span></td>
+        <td><span class="form">${row.form.map((r, i) => formLink(r, row.formMatches[i])).join('')}</span></td>
         <td class="prob num">${o.expectedPoints.toFixed(1).replace('.', ',')}</td>
         ${probCell(o.title, 'var(--titulo)')}
         ${probCell(o.libertadores, 'var(--lib)')}

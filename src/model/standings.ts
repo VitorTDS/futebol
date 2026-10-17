@@ -13,6 +13,8 @@ export interface StandingRow {
   points: number;
   /** Últimos 5 jogos, do mais antigo ao mais recente: V, E ou D */
   form: string[];
+  /** O jogo de cada letra de `form`, na mesma ordem (para abrir a partida) */
+  formMatches: { id: number; score: string }[];
 }
 
 export function isFinished(m: Match): m is Match & { homeGoals: number; awayGoals: number } {
@@ -44,7 +46,7 @@ export function computeStandings(teams: Team[], matches: Match[], upToMatchday =
   const rows = new Map<number, StandingRow>(
     teams.map((team) => [
       team.id,
-      { position: 0, team, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDiff: 0, points: 0, form: [] },
+      { position: 0, team, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDiff: 0, points: 0, form: [], formMatches: [] },
     ]),
   );
 
@@ -59,6 +61,9 @@ export function computeStandings(teams: Team[], matches: Match[], upToMatchday =
     const ag = m.awayGoals!;
     apply(home, hg, ag);
     apply(away, ag, hg);
+    const score = `${m.home.tla} ${hg}×${ag} ${m.away.tla}`;
+    home.formMatches.push({ id: m.id, score });
+    away.formMatches.push({ id: m.id, score });
   }
 
   const sorted = [...rows.values()].sort(compareRows);
@@ -66,6 +71,7 @@ export function computeStandings(teams: Team[], matches: Match[], upToMatchday =
     row.position = i + 1;
     row.goalDiff = row.goalsFor - row.goalsAgainst;
     row.form = row.form.slice(-5);
+    row.formMatches = row.formMatches.slice(-5);
   });
   return sorted;
 }
