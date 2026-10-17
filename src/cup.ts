@@ -59,6 +59,13 @@ function neutral(model: FittedModel): FittedModel {
 
 const modelFor = (a: Analysis, m: Match) => (m.stage === 'FINAL' ? neutral(a.model) : a.model);
 
+/** Resumo curto de um texto (para chaves de cache) */
+function hash(text: string): number {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
 const route = (fn: (req: Request, res: Response) => Promise<void>) => (req: Request, res: Response, next: NextFunction) =>
   fn(req, res).catch(next);
 
@@ -120,7 +127,7 @@ export function createCup(o: CupOptions) {
    * Brasil; clube de outra divisão ocupa a vaga sem passar pela tabela).
    * Com `withRunnerUp`, cada desfecho é uma final (campeão e vice).
    */
-  async function outcomes(brazilIds: Set<number>, withRunnerUp = false): Promise<{ updatedAt: string; odds: { champion: Side; runnerUp?: Side; p: number }[] }> {
+  async function outcomes(brazilIds: Set<number>, withRunnerUp = false): Promise<{ key: string; odds: { champion: Side; runnerUp?: Side; p: number }[] }> {
     const a = await getAnalysis();
     const byId = new Map(a.teams.map((t) => [t.id, t]));
     const side = (id: number): Side => (brazilIds.has(id) ? id : (byId.get(id)?.name ?? `time ${id}`));
@@ -130,7 +137,13 @@ export function createCup(o: CupOptions) {
           return { champion: side(champion), runnerUp: side(runnerUp), p };
         })
       : [...a.knockout.champion].filter(([, p]) => p > 0).map(([id, p]) => ({ champion: side(id), p }));
-    return { updatedAt: a.updatedAt, odds };
+    // Chave só com os resultados encerrados: um minuto de jogo ao vivo da copa não
+    // obriga o Brasileirão a refazer tudo, só um resultado novo
+    const key = a.matches
+      .filter(isFinished)
+      .map((m) => `${m.id}:${m.homeGoals}-${m.awayGoals}`)
+      .join(',');
+    return { key: `${o.key}:${key.length}:${hash(key)}`, odds };
   }
 
   const router = express.Router();

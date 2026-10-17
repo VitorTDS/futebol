@@ -5,8 +5,9 @@ import { createFootballDataProvider } from './data/footballData.ts';
 import { createMockProvider } from './data/mock.ts';
 import { createApiFootballPlayerProvider } from './data/players/apiFootball.ts';
 import { createMockPlayerProvider } from './data/players/mock.ts';
-import { backtest, type BacktestResult } from './model/backtest.ts';
-import { calibrateTimeDecay, halfLife, MIN_MATCHES, type Calibration } from './model/calibration.ts';
+import type { BacktestResult } from './model/backtest.ts';
+import { halfLife, MIN_MATCHES, type Calibration } from './model/calibration.ts';
+import { calibrateOffThread, historyOffThread } from './model/offThread.ts';
 import { buildBackground, fitModel, MODEL_KINDS, type Background } from './model/models.ts';
 import { MODEL_LABELS, predictMatch, topScores, type FittedModel, type ModelKind } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
@@ -14,7 +15,7 @@ import { createCupSimulator } from './model/cups.ts';
 import { isMatchTime, liveEvents } from './model/liveEvents.ts';
 import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
-import { CUPS_2026, type ContinentalCups } from './data/copas.ts';
+import { CUPS_2026, type ContinentalCups, type Cup } from './data/copas.ts';
 import { getMatchCenter } from './data/espn.ts';
 import { createCopaDoBrasilCup } from './copaDoBrasil.ts';
 import { libertadoresCup } from './libertadores.ts';
@@ -52,22 +53,20 @@ interface Analysis {
   cups: ContinentalCups | null;
   /** Copas que entraram nas vagas pela simulação da própria aba */
   cupSources: CupSources | null;
-  /** Histórico de acertos de cada modelo (para comparar) */
-  history: Record<ModelKind, BacktestResult>;
   calibration: CalibrationState;
   background: BackgroundState;
-  /** Histórico do Dixon-Coles sem as temporadas anteriores (para mostrar quanto elas ajudam) */
-  historyWithoutBackground: BacktestResult | null;
   currentMatchday: number;
   totalMatchdays: number;
   updatedAt: string;
 }
 
 let lastAnalysis: { key: string; value: Analysis } | null = null;
-let lastHistory: { key: string; value: HistorySet } | null = null;
+let lastHistory: { key: string; value: Promise<HistorySet> } | null = null;
 
 interface HistorySet {
+  /** Histórico de acertos de cada modelo (para comparar) */
   byModel: Record<ModelKind, BacktestResult>;
+  /** Histórico do Dixon-Coles sem as temporadas anteriores (para mostrar quanto elas ajudam) */
   withoutBackground: BacktestResult | null;
 }
 
@@ -148,7 +147,7 @@ function currentCalibration(teams: Team[], matches: Match[], background: Backgro
   const entry: { key: string; state: CalibrationState } = { key, state: { status: 'running', decay: previous } };
   calibration = entry;
   console.log('   Calibrando TIME_DECAY…');
-  calibrateTimeDecay(teams, matches, config.defaultTimeDecay, background)
+  calibrateOffThread({ teams, matches, defaultDecay: config.defaultTimeDecay, background })
     .then((result) => {
       if (calibration !== entry) return; // chegaram resultados novos no meio do caminho
       entry.state = { status: 'done', decay: result.best, result };
@@ -167,21 +166,28 @@ function currentCalibration(teams: Team[], matches: Match[], background: Backgro
   return entry.state;
 }
 
-/** O histórico só depende dos jogos encerrados: não precisa refazer a cada minuto de jogo ao vivo. */
-function getHistory(teams: Team[], matches: Match[], calib: CalibrationState, background: Background | null): HistorySet {
+/**
+ * O histórico só depende dos jogos encerrados: não precisa refazer a cada minuto
+ * de jogo ao vivo. São vários backtests (segundos de conta), então rodam na thread
+ * de backtests e só quando a aba Acertos pede.
+ */
+function getHistory(teams: Team[], matches: Match[], calib: CalibrationState, background: Background | null): Promise<HistorySet> {
   const key = `${finishedKey(matches)}@${calib.decay}|${backgroundKey(background)}`;
   if (lastHistory?.key !== key) {
-    const byModel = Object.fromEntries(
-      MODEL_KINDS.map((kind) => {
-        // A calibração já calculou o histórico do valor escolhido: reaproveita
-        if (kind === 'dixon-coles' && calib.status === 'done' && calib.result.best === calib.decay) {
-          return [kind, calib.result.bestResult];
-        }
-        return [kind, backtest(kind, teams, matches, calib.decay, background)];
-      }),
-    ) as Record<ModelKind, BacktestResult>;
-    const withoutBackground = background ? backtest('dixon-coles', teams, matches, calib.decay) : null;
-    lastHistory = { key, value: { byModel, withoutBackground } };
+    // A calibração já calculou o histórico do Dixon-Coles com o valor escolhido: reaproveita
+    const ready = calib.status === 'done' && calib.result.best === calib.decay ? calib.result.bestResult : null;
+    const entry = {
+      key,
+      value: historyOffThread({ teams, matches, decay: calib.decay, background, skip: ready ? ['dixon-coles'] : [] }).then(
+        (r): HistorySet => ({
+          byModel: { ...r.byModel, ...(ready ? { 'dixon-coles': ready } : {}) } as Record<ModelKind, BacktestResult>,
+          withoutBackground: r.withoutBackground,
+        }),
+      ),
+    };
+    // Se der erro, tenta de novo na próxima vez
+    entry.value.catch(() => lastHistory === entry && (lastHistory = null));
+    lastHistory = entry;
   }
   return lastHistory.value;
 }
@@ -249,36 +255,26 @@ async function currentCups(teams: Team[]): Promise<{ cups: ContinentalCups; sour
   const cups = { ...CUPS_2026 };
   const sources: CupSources = { libertadores: false, copaDoBrasil: false, sulamericana: false };
   const keys: string[] = [];
-  try {
-    const lib = await libertadoresCup.outcomes(ids);
-    cups.libertadores = { ...cups.libertadores, odds: lib.odds };
-    sources.libertadores = true;
-    keys.push(lib.updatedAt);
-  } catch (err) {
-    console.warn('Vagas: sem a simulação da Libertadores, usando as semifinais de copas.ts:', (err as Error).message);
-  }
-  try {
+  // As três ao mesmo tempo (cada uma busca a sua fonte)
+  const [lib, cdb, sula] = await Promise.allSettled([
+    libertadoresCup.outcomes(ids),
     // Campeão e vice da Copa do Brasil vão à Libertadores: cada desfecho é uma final
-    const cdb = await copaDoBrasilCup.outcomes(ids, true);
-    if (cdb.odds.length) {
-      cups.copaDoBrasil = { ...cups.copaDoBrasil, odds: cdb.odds };
-      sources.copaDoBrasil = true;
-      keys.push(cdb.updatedAt);
-    }
-  } catch (err) {
-    console.warn('Vagas: sem a simulação da Copa do Brasil, usando as semifinais de copas.ts:', (err as Error).message);
-  }
-  try {
+    copaDoBrasilCup.outcomes(ids, true),
     // Só o campeão da Sul-Americana ganha vaga (e só se for brasileiro)
-    const sula = await sulamericanaCup.outcomes(ids);
-    if (sula.odds.length) {
-      cups.sulamericana = { ...cups.sulamericana, odds: sula.odds };
-      sources.sulamericana = true;
-      keys.push(sula.updatedAt);
+    sulamericanaCup.outcomes(ids),
+  ]);
+  const use = (r: PromiseSettledResult<{ key: string; odds: Cup['odds'] & {} }>, cup: keyof ContinentalCups, label: string) => {
+    if (r.status === 'fulfilled' && r.value.odds.length) {
+      cups[cup] = { ...cups[cup], odds: r.value.odds };
+      sources[cup] = true;
+      keys.push(r.value.key);
+    } else if (r.status === 'rejected') {
+      console.warn(`Vagas: sem a simulação da ${label}, usando as semifinais de copas.ts:`, (r.reason as Error).message);
     }
-  } catch (err) {
-    console.warn('Vagas: sem a simulação da Sul-Americana, usando as semifinais de copas.ts:', (err as Error).message);
-  }
+  };
+  use(lib, 'libertadores', 'Libertadores');
+  use(cdb, 'copaDoBrasil', 'Copa do Brasil');
+  use(sula, 'sulamericana', 'Sul-Americana');
   return { cups, sources, key: keys.join('+') || 'manual' };
 }
 
@@ -313,7 +309,6 @@ async function getAnalysis(): Promise<Analysis> {
   const bg = await getBackground(teams);
   const calib = currentCalibration(teams, matches, bg.background);
   const model = fitModel(config.model, teams, matches, new Date().toISOString(), calib.decay, bg.background);
-  const history = getHistory(teams, matches, calib, bg.background);
   const cups = cupState?.cups ?? null;
   const outlook = runSimulation(teams, matches, model, cups, config.simulations);
   const matchdays = matches.map((m) => m.matchday);
@@ -328,8 +323,6 @@ async function getAnalysis(): Promise<Analysis> {
     zones: outlook.zones,
     cups,
     cupSources: cupState?.sources ?? null,
-    history: history.byModel,
-    historyWithoutBackground: history.withoutBackground,
     calibration: calib,
     background: bg,
     currentMatchday: currentMatchday(matches),
@@ -695,7 +688,8 @@ app.get(
   '/api/history',
   route(async (req, res) => {
     const a = await getAnalysis();
-    const history = a.history;
+    const h = await getHistory(a.teams, a.matches, a.calibration, a.background.background);
+    const history = h.byModel;
     const { summary, entries } = history[config.model];
     const calib = a.calibration;
     const lastPlayed = summary.byMatchday.at(-1)?.matchday ?? 0;
@@ -708,22 +702,22 @@ app.get(
           const s = history[kind].summary;
           return {
             kind,
-            label: MODEL_LABELS[kind] + (kind === 'dixon-coles' && a.historyWithoutBackground ? ' + temporada anterior' : ''),
+            label: MODEL_LABELS[kind] + (kind === 'dixon-coles' && h.withoutBackground ? ' + temporada anterior' : ''),
             active: kind === config.model,
             accuracy: s.accuracy,
             exactAccuracy: s.exactAccuracy,
             brier: s.brier,
           };
         }),
-        ...(a.historyWithoutBackground
+        ...(h.withoutBackground
           ? [
               {
                 kind: 'dixon-coles-only-current',
                 label: 'Dixon-Coles só com a temporada atual',
                 active: false,
-                accuracy: a.historyWithoutBackground.summary.accuracy,
-                exactAccuracy: a.historyWithoutBackground.summary.exactAccuracy,
-                brier: a.historyWithoutBackground.summary.brier,
+                accuracy: h.withoutBackground.summary.accuracy,
+                exactAccuracy: h.withoutBackground.summary.exactAccuracy,
+                brier: h.withoutBackground.summary.brier,
               },
             ]
           : []),
@@ -731,8 +725,8 @@ app.get(
       background: {
         ...backgroundInfo(a),
         earlyRounds: EARLY_ROUNDS,
-        early: a.historyWithoutBackground
-          ? { with: earlyRounds(history['dixon-coles'], EARLY_ROUNDS), without: earlyRounds(a.historyWithoutBackground, EARLY_ROUNDS) }
+        early: h.withoutBackground
+          ? { with: earlyRounds(history['dixon-coles'], EARLY_ROUNDS), without: earlyRounds(h.withoutBackground, EARLY_ROUNDS) }
           : null,
       },
       calibration: {
