@@ -390,7 +390,8 @@ body[data-tab="jogo"] .destaque { display: none; }
 .comp-card.on { background: var(--amarelo); color: var(--tinta); border-color: var(--amarelo); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
 
 /* Só aparecem as abas do campeonato aberto */
-body[data-comp="lib"] .bsa-tab, body[data-comp="cdb"] .bsa-tab, body:not([data-comp="lib"]) .lib-tab, body:not([data-comp="cdb"]) .cdb-tab { display: none !important; }
+body[data-comp="lib"] .bsa-tab, body[data-comp="cdb"] .bsa-tab, body[data-comp="sula"] .bsa-tab,
+body:not([data-comp="lib"]) .lib-tab, body:not([data-comp="cdb"]) .cdb-tab, body:not([data-comp="sula"]) .sula-tab { display: none !important; }
 .comp-card b .short { display: none; }
 
 /* Libertadores: azul-marinho e dourado, as cores da taça */
@@ -763,9 +764,21 @@ body[data-comp="cdb"] .hero { box-shadow: 0 6px 0 #2c3a4d; }
 @media (max-width: 640px) {
   .comp-card b .full { display: none; }
   .comp-card b .short { display: inline; }
-  /* Três campeonatos lado a lado: sem o ícone e com letra menor */
+  /* Quatro campeonatos lado a lado: sem o ícone e com letra menor */
   .comp-switch { gap: 6px; }
   .comp-card { min-width: 0; padding: 6px 4px; }
   .comp-card .ico { display: none; }
   .comp-card b { font-size: 11px; white-space: nowrap; }
 }
+
+/* Sul-Americana: roxo-escuro com laranja */
+body[data-comp="sula"] {
+  --lousa: #2a1b54;
+  --lousa-2: #37246c;
+  --amarelo: #f5a623;
+  --madeira: #5b3a12;
+  --verde: #1f7a4d;
+  --giz-mute: #c9bfe3;
+}
+body[data-comp="sula"] .hero::before { background: linear-gradient(90deg, #f5a623 0 50%, #2a1b54 50% 52%, #f5a623 52%); }
+body[data-comp="sula"] .hero { box-shadow: 0 6px 0 #1a103a; }

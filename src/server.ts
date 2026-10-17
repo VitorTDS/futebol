@@ -18,6 +18,7 @@ import { CUPS_2026, type ContinentalCups } from './data/copas.ts';
 import { getMatchCenter } from './data/espn.ts';
 import { createCopaDoBrasilCup } from './copaDoBrasil.ts';
 import { libertadoresCup } from './libertadores.ts';
+import { createSulamericanaCup } from './sulamericana.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
@@ -222,27 +223,31 @@ function cupsApply(matches: Match[]): boolean {
   return provider.name === 'football-data.org' && config.competition === 'BSA' && season === 2026;
 }
 
-const copaDoBrasilCup = createCopaDoBrasilCup({
-  year: Number(config.season) || new Date().getUTCFullYear(),
-  leagueMatches: () => provider.getMatches(),
-  leagueTeams: async () => teamsFrom(await provider.getMatches()),
+const cupYear = Number(config.season) || new Date().getUTCFullYear();
+const leagueTeams = async () => teamsFrom(await provider.getMatches());
+const copaDoBrasilCup = createCopaDoBrasilCup({ year: cupYear, leagueMatches: () => provider.getMatches(), leagueTeams });
+const sulamericanaCup = createSulamericanaCup({
+  year: cupYear,
+  extraMatches: async () => [...(await provider.getMatches()), ...(await libertadoresCup.matches().catch(() => [] as Match[]))],
+  leagueTeams,
 });
 
 /** Quais copas entram nas vagas com a simulação da própria aba (as outras, pelo copas.ts) */
 export interface CupSources {
   libertadores: boolean;
   copaDoBrasil: boolean;
+  sulamericana: boolean;
 }
 
 /**
- * Situação das copas para as vagas. Libertadores e Copa do Brasil usam a mesma
- * simulação das suas abas (chaveamento real e modelo próprio); se alguma falhar,
- * ela volta para as semifinais escritas à mão em copas.ts. A Sul-Americana é sempre à mão.
+ * Situação das copas para as vagas. Cada copa usa a mesma simulação da sua aba
+ * (chaveamento real e modelo próprio); se alguma falhar, ela volta para as
+ * semifinais escritas à mão em copas.ts.
  */
 async function currentCups(teams: Team[]): Promise<{ cups: ContinentalCups; sources: CupSources; key: string }> {
   const ids = new Set(teams.map((t) => t.id));
   const cups = { ...CUPS_2026 };
-  const sources: CupSources = { libertadores: false, copaDoBrasil: false };
+  const sources: CupSources = { libertadores: false, copaDoBrasil: false, sulamericana: false };
   const keys: string[] = [];
   try {
     const lib = await libertadoresCup.outcomes(ids);
@@ -262,6 +267,17 @@ async function currentCups(teams: Team[]): Promise<{ cups: ContinentalCups; sour
     }
   } catch (err) {
     console.warn('Vagas: sem a simulação da Copa do Brasil, usando as semifinais de copas.ts:', (err as Error).message);
+  }
+  try {
+    // Só o campeão da Sul-Americana ganha vaga (e só se for brasileiro)
+    const sula = await sulamericanaCup.outcomes(ids);
+    if (sula.odds.length) {
+      cups.sulamericana = { ...cups.sulamericana, odds: sula.odds };
+      sources.sulamericana = true;
+      keys.push(sula.updatedAt);
+    }
+  } catch (err) {
+    console.warn('Vagas: sem a simulação da Sul-Americana, usando as semifinais de copas.ts:', (err as Error).message);
   }
   return { cups, sources, key: keys.join('+') || 'manual' };
 }
@@ -748,6 +764,7 @@ app.get(
 
 app.use('/api/lib', libertadoresCup.router);
 app.use('/api/cdb', copaDoBrasilCup.router);
+app.use('/api/sula', sulamericanaCup.router);
 
 // ---------- Ao vivo: avisa as páginas abertas assim que um placar muda ----------
 

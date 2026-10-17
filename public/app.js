@@ -14,11 +14,26 @@ Chart.defaults.font.family = 'Archivo, system-ui, -apple-system, "Segoe UI", Rob
 
 const $ = (sel) => document.querySelector(sel);
 
-// Campeonato aberto: Brasileirão (bsa) ou uma copa: Libertadores (lib), Copa do Brasil (cdb)
+// Campeonato aberto: Brasileirão (bsa) ou uma copa: Libertadores (lib), Copa do Brasil (cdb), Sul-Americana (sula)
 state.comp = 'bsa';
 const CUP_INFO = {
-  lib: { name: 'Libertadores', title: 'CONMEBOL Libertadores 2026', slogan: 'a glória eterna', groups: true },
-  cdb: { name: 'Copa do Brasil', title: 'Copa do Brasil 2026', slogan: 'vaga direta na Libertadores', groups: false },
+  lib: {
+    name: 'Libertadores',
+    title: 'CONMEBOL Libertadores 2026',
+    slogan: 'a glória eterna',
+    pages: ['chave', 'jogos', 'grupos', 'gols'],
+    model: 'da Libertadores',
+    legend: { lib: 'Oitavas de final', sul: 'Sul-Americana' },
+  },
+  cdb: { name: 'Copa do Brasil', title: 'Copa do Brasil 2026', slogan: 'vaga direta na Libertadores', pages: ['chave', 'jogos'], model: 'da Copa do Brasil e do Brasileirão' },
+  sula: {
+    name: 'Sul-Americana',
+    title: 'CONMEBOL Sul-Americana 2026',
+    slogan: 'o campeão vai à Libertadores',
+    pages: ['chave', 'jogos', 'grupos'],
+    model: 'da Sul-Americana, do Brasileirão e da Libertadores',
+    legend: { lib: 'Mata-mata (1º direto às oitavas, 2º nos playoffs)', sul: null },
+  },
 };
 const isCup = () => state.comp in CUP_INFO;
 const cupApi = (p) => `/api/${state.comp}${p}`;
@@ -177,7 +192,11 @@ function cupSourcesText(s) {
   const parts = [];
   if (s?.copaDoBrasil) parts.push('quem chega à final da <a href="#/cdb/chave">Copa do Brasil</a>');
   if (s?.libertadores) parts.push('quem ganha a <a href="#/lib/chave">Libertadores</a>');
-  return parts.length ? `As chances de ${parts.join(' e de ')} são as mesmas das abas de cada copa.` : '';
+  if (s?.sulamericana) parts.push('quem ganha a <a href="#/sula/chave">Sul-Americana</a>');
+  if (!parts.length) return '';
+  // "de A, de B e de C"
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', de ')} e de ${parts.at(-1)}` : parts[0];
+  return `As chances de ${list} são as mesmas das abas de cada copa.`;
 }
 
 // Explica até onde vão as vagas, que dependem das copas ainda em disputa.
@@ -259,7 +278,7 @@ async function loadHero() {
   checkAlerts(data.matches);
   // Alertas de gol valem para todos os campeonatos
   if (alerts.on) {
-    for (const url of ['/api/matches', '/api/lib/matches', '/api/cdb/matches']) {
+    for (const url of ['/api/matches', '/api/lib/matches', '/api/cdb/matches', '/api/sula/matches']) {
       if (url !== (isCup() ? cupApi('/matches') : '/api/matches')) api(url).then((other) => checkAlerts(other.matches), () => {});
     }
   }
@@ -1663,7 +1682,7 @@ async function loadLibBracket() {
     .map((s) => `<div class="fase-col"><h3>${escapeHtml(s.label)}</h3><div class="fase-ties">${s.ties.map((t) => tieCard(t, s.key === 'FINAL' ? o.champions : null)).join('')}</div></div>`)
     .join('');
   $('#cup-slogan').textContent = CUP_INFO[state.comp].slogan;
-  const jogos = state.comp === 'cdb' ? 'da Copa do Brasil e do Brasileirão' : 'da Libertadores';
+  const jogos = CUP_INFO[state.comp].model;
   $('#lib-nota').textContent = `Chances calculadas com ${o.simulations.toLocaleString('pt-BR')} simulações do mata-mata, usando o modelo ajustado com os jogos ${jogos}. A final é em jogo único, em campo neutro.`;
   growBars($('#lib-chave'));
 }
@@ -1684,6 +1703,10 @@ async function loadLibMatches() {
 async function loadLibGroups() {
   const data = await api(cupApi('/groups'));
   libMeta().catch(() => {});
+  // Legenda: o que significa a cor de cada posição nesta copa
+  const legend = CUP_INFO[state.comp].legend;
+  $('#grupos-legenda-lib').lastChild.textContent = ` ${legend.lib}`;
+  $('#grupos-legenda-sul').hidden = !legend.sul;
   $('#lib-groups').innerHTML = data.groups
     .map(
       (g) => `<div class="grupo"><h3>Grupo ${escapeHtml(g.group)}</h3><div class="table-wrap"><table class="standings mini-tab">
@@ -1737,7 +1760,7 @@ async function loadLibTeam() {
   const t = d.team;
   const cup = CUP_INFO[state.comp].name;
   document.title = `${t.shortName} · ${cup}`;
-  $('#lib-time-back').href = cup === 'Libertadores' ? '#/lib/grupos' : `#/${state.comp}/chave`;
+  $('#lib-time-back').href = `#/${state.comp}/${CUP_INFO[state.comp].pages.includes('grupos') ? 'grupos' : 'chave'}`;
   $('#lib-time-back').textContent = `← ${cup}`;
   $('#lib-team-caminho').textContent = `Caminho na ${cup}`;
   const out = d.journey.find((s) => s.result === 'eliminado');
@@ -2215,8 +2238,6 @@ async function refresh() {
 }
 
 // Navegação pelo endereço: #/jogos, #/time/12 etc. (o botão "voltar" do navegador funciona)
-const LIB_PAGES = ['chave', 'jogos', 'grupos', 'gols'];
-
 function applyRoute() {
   const [page, id, , vsId] = location.hash.replace(/^#\/?/, '').split('/');
   const comp = page in CUP_INFO ? page : 'bsa';
@@ -2243,7 +2264,7 @@ function applyRoute() {
       }
       state.jogo.id = jogoId;
     } else {
-      const pages = CUP_INFO[comp].groups ? LIB_PAGES : ['chave', 'jogos'];
+      const pages = CUP_INFO[comp].pages;
       state.tab = `lib-${pages.includes(id) ? id : 'chave'}`;
       document.title = `${CUP_INFO[comp].name} · Painel`;
     }
@@ -2277,7 +2298,7 @@ function applyRoute() {
   let activeTab = state.tab === 'jogador' ? 'scout' : state.tab === 'jogo' ? 'jogos' : state.tab;
   if (isCup()) {
     const c = state.comp;
-    activeTab = state.tab === 'jogo' ? `${c}/jogos` : state.tab === 'lib-time' ? `${c}/${CUP_INFO[c].groups ? 'grupos' : 'chave'}` : state.tab.replace('lib-', `${c}/`);
+    activeTab = state.tab === 'jogo' ? `${c}/jogos` : state.tab === 'lib-time' ? `${c}/${CUP_INFO[c].pages.includes('grupos') ? 'grupos' : 'chave'}` : state.tab.replace('lib-', `${c}/`);
   }
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === activeTab));
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === state.tab));

@@ -1,8 +1,8 @@
 // Situação das copas que dão vaga extra na Libertadores 2027 pelo Brasil.
-// Libertadores e Copa do Brasil vêm sozinhas das simulações das suas abas; o que
-// está escrito aqui para elas só vale se a fonte falhar. A Sul-Americana é só daqui:
-// ATUALIZE À MÃO quando sair resultado: preencha o placar (score) de cada jogo
-// encerrado e, quando a final acontecer, troque `semifinals` por `decided`.
+// As três copas vêm sozinhas das simulações das suas abas (Libertadores, Copa do
+// Brasil e Sul-Americana). O que está escrito aqui só vale se a fonte de uma delas
+// falhar: nesse caso, preencha o placar (score) de cada jogo encerrado e, quando a
+// final acontecer, troque `semifinals` por `decided`.
 //
 // Times da Série A vão pelo id da football-data.org; clubes de fora (estrangeiros
 // ou de outras divisões) vão pelo nome, como texto.

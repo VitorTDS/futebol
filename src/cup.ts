@@ -365,5 +365,8 @@ export function createCup(o: CupOptions) {
     }),
   );
 
-  return { router, outcomes };
+  /** Jogos da copa (para outras copas usarem no modelo) */
+  const matches = async () => (await getAnalysis()).matches;
+
+  return { router, outcomes, matches };
 }

@@ -2,7 +2,7 @@
 // Na Copa do Brasil jogam clubes de todas as divisões; os jogos do Brasileirão
 // entram no modelo para medir melhor os times da Série A.
 import { createCup } from './cup.ts';
-import { CDB_STAGES, createCopaDoBrasilProvider } from './data/copaDoBrasil.ts';
+import { CDB_STAGES, createEspnCupProvider } from './data/espnCup.ts';
 import type { Match, Team } from './types.ts';
 
 export function createCopaDoBrasilCup(opts: { year: number; leagueMatches: () => Promise<Match[]>; leagueTeams: () => Promise<Team[]> }) {
@@ -10,7 +10,7 @@ export function createCopaDoBrasilCup(opts: { year: number; leagueMatches: () =>
   return createCup({
     key: 'cdb',
     name: 'Copa do Brasil',
-    provider: createCopaDoBrasilProvider({ year: opts.year, leagueTeams: opts.leagueTeams }),
+    provider: createEspnCupProvider({ league: 'bra.copa_do_brazil', year: opts.year, stages: CDB_STAGES, leagueTeams: opts.leagueTeams }),
     missing: '',
     espnLeague: 'bra.copa_do_brazil',
     stages,
