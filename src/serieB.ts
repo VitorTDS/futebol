@@ -10,8 +10,9 @@ import { fitDixonColes } from './model/dixonColes.ts';
 import { predictMatch, topScores, type FittedModel } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { simulateSeason, type TeamOutlook } from './model/simulation.ts';
-import { computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
-import { teamResults } from './model/teamProfile.ts';
+import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
+import { ratings, teamResults } from './model/teamProfile.ts';
+import { pickedScores } from './model/whatif.ts';
 import type { Match, Team } from './types.ts';
 
 /** Na simulação, a "Libertadores" faz o papel do acesso (4 primeiros); 4 caem para a Série C */
@@ -31,7 +32,10 @@ interface Analysis {
 const route = (fn: (req: Request, res: Response) => Promise<void>) => (req: Request, res: Response, next: NextFunction) =>
   fn(req, res).catch(next);
 
-export function createSerieB(opts: { year: number }) {
+/** Resumo do time numa copa (a página do time mostra a Copa do Brasil junto) */
+type CupSummary = (teamId: number) => Promise<unknown>;
+
+export function createSerieB(opts: { year: number; cups?: CupSummary[] }) {
   const provider = resilient(createEspnLeagueProvider({ league: 'bra.2', year: opts.year }), 'Série B');
   let last: { key: string; value: Analysis } | null = null;
   let previous: Match[] | null = null;
@@ -146,6 +150,86 @@ export function createSerieB(opts: { year: number }) {
         espn,
         espnError,
       });
+    }),
+  );
+
+  // ---------- Página do time ----------
+
+  router.get(
+    '/time/:id',
+    route(async (req, res) => {
+      const a = await getAnalysis();
+      const id = Number(req.params.id);
+      const standing = a.standings.find((r) => r.team.id === id);
+      if (!standing) {
+        res.status(404).json({ error: 'Time não encontrado na Série B' });
+        return;
+      }
+      const o = a.outlook.get(id)!;
+      const rated = ratings(a.model, a.teams);
+      const own = rated.get(id)!;
+      const all = [...rated.values()];
+      const { matchdays, positions } = computeEvolution(a.teams, a.matches);
+      // O mesmo time nas copas que ele joga (a Copa do Brasil tem clubes da Série B)
+      const cups = (await Promise.allSettled((opts.cups ?? []).map((c) => c(id))))
+        .map((r) => (r.status === 'fulfilled' ? r.value : null))
+        .filter((c) => c != null);
+      res.json({
+        team: standing.team,
+        standing,
+        totalTeams: a.teams.length,
+        zones: { promotion: ZONES.libertadores, relegation: ZONES.relegation },
+        outlook: { title: o.title, promotion: o.libertadores, relegation: o.relegation, expectedPoints: o.expectedPoints, positionProbs: o.positionProbs },
+        ratings: {
+          ...own,
+          attackRank: all.filter((r) => r.attack > own.attack).length + 1,
+          defenseRank: all.filter((r) => r.defense < own.defense).length + 1,
+        },
+        evolution: { matchdays, positions: positions.get(id) },
+        results: teamResults(id, a.matches).reverse(),
+        upcoming: a.matches
+          .filter((m) => !isFinished(m) && (m.home.id === id || m.away.id === id))
+          .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
+          .map((m) => ({ ...m, prediction: predictMatch(a.model, m) })),
+        cups,
+        watchUrl: config.watchUrl,
+      });
+    }),
+  );
+
+  // ---------- "E se" da Série B (a briga pelo acesso e contra a queda) ----------
+
+  const WHATIF_RUNS = 4000;
+  // Mesmos sorteios no cenário-base e no "e se": a diferença vem só dos palpites
+  const WHATIF_SEED = 2026;
+  let whatifBase: { analysis: Analysis; teams: TeamOutlook[] } | null = null;
+  const simulate = (a: Analysis, forced?: Map<number, [number, number]>) =>
+    simulateSeason(a.teams, a.matches, a.model, { runs: WHATIF_RUNS, zones: ZONES, rng: mulberry32(WHATIF_SEED), forced }).teams;
+
+  router.get(
+    '/whatif',
+    route(async (_req, res) => {
+      const a = await getAnalysis();
+      res.json({
+        currentMatchday: a.currentMatchday,
+        totalMatchdays: a.totalMatchdays,
+        matches: a.matches
+          .filter((m) => !isFinished(m))
+          .sort((x, y) => x.matchday - y.matchday || x.utcDate.localeCompare(y.utcDate))
+          .map((m) => ({ ...m, prediction: predictMatch(a.model, m) })),
+        standings: a.standings.map((row) => ({ position: row.position, team: row.team, points: row.points, outlook: a.outlook.get(row.team.id) })),
+      });
+    }),
+  );
+
+  router.post(
+    '/whatif',
+    express.json({ limit: '16kb' }),
+    route(async (req, res) => {
+      const a = await getAnalysis();
+      if (whatifBase?.analysis !== a) whatifBase = { analysis: a, teams: simulate(a) };
+      const forced = pickedScores(a.matches, req.body?.picks ?? {});
+      res.json({ runs: WHATIF_RUNS, teams: simulate(a, forced), base: whatifBase.teams });
     }),
   );
 

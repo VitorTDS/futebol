@@ -11,7 +11,9 @@ const canVibrate = 'vibrate' in navigator;
 // Notificação do sistema só existe em endereço seguro (https ou localhost)
 const canNotify = window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator;
 
-if (canNotify) {
+// O service worker guarda a cópia para abrir sem internet e mostra as notificações.
+// Só existe em endereço seguro (https ou localhost).
+if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register('sw.js').then(
     (reg) => {
       swRegistration = reg;

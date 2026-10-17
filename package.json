@@ -12,16 +12,20 @@
     "start": "node src/server.ts",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",
-    "chaves-push": "node -e \"const k=require('web-push').generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey);console.log('VAPID_PRIVATE_KEY='+k.privateKey)\""
+    "chaves-push": "node -e \"const k=require('web-push').generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey);console.log('VAPID_PRIVATE_KEY='+k.privateKey)\"",
+    "test:telas": "node --test --test-timeout=600000 test-telas/telas.test.ts"
   },
   "dependencies": {
+    "compression": "^1.8.0",
     "express": "^5.1.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/express": "^5.0.3",
     "@types/node": "^24.0.0",
     "@types/web-push": "^3.6.4",
+    "puppeteer-core": "^24.10.0",
     "typescript": "^5.9.2"
   }
 }

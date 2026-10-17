@@ -17,6 +17,17 @@ Abra http://localhost:3001.
 Sem configurar nada, o sistema usa **dados de exemplo** (um campeonato com
 resultados sorteados), para você ver tudo funcionando.
 
+### Testes
+
+```bash
+npm test             # cálculos (modelo, simulação, copas, fontes de dados...)
+npm run test:telas   # abre o Chrome sem janela e passa por todas as telas, no computador e no celular
+```
+
+O teste das telas usa o Chrome instalado (outro caminho: variável `CHROME_PATH`),
+os dados reais do `.env` e a internet. Ele falha se alguma tela der erro de
+JavaScript, mostrar aviso de erro, ficar vazia ou ficar mais larga que o celular.
+
 ## Usando dados reais
 
 1. Crie uma conta grátis em https://www.football-data.org/client/register e copie o token que chega por e-mail.

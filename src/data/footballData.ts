@@ -87,13 +87,20 @@ export function createFootballDataProvider(opts: {
     const url = new URL(BASE_URL + apiPath);
     if (season) url.searchParams.set('season', season);
 
-    // Sem resposta em 15 s, desiste (senão a página fica esperando para sempre)
-    const res = await fetch(url, { headers: { 'X-Auth-Token': opts.token }, signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) {
+    for (let attempt = 0; ; attempt++) {
+      // Sem resposta em 15 s, desiste (senão a página fica esperando para sempre)
+      const res = await fetch(url, { headers: { 'X-Auth-Token': opts.token }, signal: AbortSignal.timeout(15_000) });
+      if (res.ok) return res.json() as Promise<T>;
       const body = await res.text();
+      // Limite do plano grátis (10 por minuto): a própria API diz quanto esperar ("Wait 25 seconds")
+      if (res.status === 429 && attempt < 2) {
+        const wait = Number(/Wait (\d+) second/i.exec(body)?.[1] ?? 30);
+        console.warn(`football-data: limite de requisições, esperando ${wait} s`);
+        await new Promise((r) => setTimeout(r, Math.min(wait, 60) * 1000 + 500));
+        continue;
+      }
       throw new Error(`football-data.org respondeu ${res.status}: ${body.slice(0, 200)}`);
     }
-    return res.json() as Promise<T>;
   }
 
   // Jogos adiados, suspensos ou cancelados: não são "atrasados", só não têm data

@@ -1,13 +1,26 @@
 // ---------- Simulador "e se" ----------
 
 
-state.ese = { data: null, matchday: null, picks: store.get('ese.picks', {}), result: null, timer: null, seq: 0 };
+state.ese = { comp: 'bsa', data: null, matchday: null, picks: store.get('ese.picks', {}), result: null, timer: null, seq: 0 };
+// Palpites guardados por campeonato (o Brasileirão fica na chave antiga)
+const esePicksKey = (comp) => (comp === 'bsa' ? 'ese.picks' : `ese.picks.${comp}`);
+// Na Série B, a coluna "Liberta" é o acesso
+const eseSpotLabel = () => (state.ese.comp === 'serieb' ? 'Acesso' : 'Libertadores');
 
 const PICK_LABEL = { H: 'Casa', D: 'Empate', A: 'Fora' };
 
 async function loadWhatif() {
   const ese = state.ese;
-  ese.data = await api('/api/whatif');
+  // Trocou de campeonato: palpites, rodada e lista de times são outros
+  if (ese.comp !== state.comp) {
+    ese.comp = state.comp;
+    ese.picks = store.get(esePicksKey(ese.comp), {});
+    ese.matchday = null;
+    ese.result = null;
+    $('#ese-team').length = 1;
+  }
+  $('#ese-col-lib').textContent = ese.comp === 'serieb' ? 'Acesso' : 'Liberta';
+  ese.data = await api(compApi('/whatif'));
   const pendingIds = new Set(ese.data.matches.map((m) => String(m.id)));
   // Jogo que já terminou de verdade sai dos palpites
   for (const id of Object.keys(ese.picks)) if (!pendingIds.has(id)) delete ese.picks[id];
@@ -22,7 +35,9 @@ async function loadWhatif() {
     select.value = String(store.get('meuTime', '') ?? '');
   }
   renderWhatifMatches();
-  await Promise.all([recalcWhatif(), loadWhatifCups()]);
+  // As copas só mudam as vagas do Brasileirão
+  $('#ese-copas-box').hidden = ese.comp !== 'bsa';
+  await Promise.all([recalcWhatif(), ese.comp === 'bsa' ? loadWhatifCups() : null]);
 }
 
 // Confrontos em aberto das copas que dão vaga: quem passar muda as vagas do Brasileirão
@@ -101,7 +116,8 @@ function renderWhatifMatches() {
     })
     .join('');
 
-  const n = Object.keys(ese.picks).length + Object.keys(CUP_INFO).reduce((s, c) => s + Object.keys(state.cupPicks[c] ?? {}).length, 0);
+  const cupCount = ese.comp === 'bsa' ? Object.keys(CUP_INFO).reduce((s, c) => s + Object.keys(state.cupPicks[c] ?? {}).length, 0) : 0;
+  const n = Object.keys(ese.picks).length + cupCount;
   $('#ese-count').textContent = n ? `${n} jogo${n > 1 ? 's' : ''} escolhido${n > 1 ? 's' : ''}` : 'Nenhum jogo escolhido';
   $('#ese-clear').hidden = !n;
 }
@@ -117,10 +133,10 @@ async function recalcWhatif() {
   const ese = state.ese;
   const seq = ++ese.seq;
   $('#ese-status').textContent = 'calculando…';
-  const res = await fetch('/api/whatif', {
+  const res = await fetch(compApi('/whatif'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ picks: ese.picks, cupPicks: state.cupPicks }),
+    body: JSON.stringify({ picks: ese.picks, ...(ese.comp === 'bsa' ? { cupPicks: state.cupPicks } : {}) }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
@@ -167,7 +183,7 @@ function renderWhatifResult() {
       ${[
         ['Pontos projetados', focus.o.expectedPoints.toFixed(1).replace('.', ','), delta(focus.o.expectedPoints, focus.base.outlook.expectedPoints, { points: true })],
         ['Título', pct(focus.o.title), delta(focus.o.title, focus.base.outlook.title)],
-        ['Libertadores', pct(focus.o.libertadores), delta(focus.o.libertadores, focus.base.outlook.libertadores)],
+        [eseSpotLabel(), pct(focus.o.libertadores), delta(focus.o.libertadores, focus.base.outlook.libertadores)],
         ['Rebaixamento', pct(focus.o.relegation), delta(focus.o.relegation, focus.base.outlook.relegation, { badUp: true })],
       ]
         .map(([label, value, d]) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div><div class="compare">${d || 'sem mudança'}</div></div>`)
@@ -181,16 +197,18 @@ $('#ese-matches').addEventListener('click', (e) => {
   const { id, p } = btn.dataset;
   if (state.ese.picks[id] === p) delete state.ese.picks[id];
   else state.ese.picks[id] = p;
-  store.set('ese.picks', state.ese.picks);
+  store.set(esePicksKey(state.ese.comp), state.ese.picks);
   renderWhatifMatches();
   scheduleWhatif();
 });
 
 $('#ese-clear').addEventListener('click', () => {
   state.ese.picks = {};
-  store.set('ese.picks', {});
-  state.cupPicks = { lib: {}, cdb: {}, sula: {} };
-  saveCupPicks();
+  store.set(esePicksKey(state.ese.comp), {});
+  if (state.ese.comp === 'bsa') {
+    state.cupPicks = { lib: {}, cdb: {}, sula: {} };
+    saveCupPicks();
+  }
   renderWhatifCups();
   renderWhatifMatches();
   scheduleWhatif();

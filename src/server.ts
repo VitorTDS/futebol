@@ -1,3 +1,4 @@
+import compression from 'compression';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -241,7 +242,8 @@ function cupsApply(matches: Match[]): boolean {
 const cupYear = Number(config.season) || new Date().getUTCFullYear();
 const leagueTeams = async () => teamsFrom(await provider.getMatches());
 const copaDoBrasilCup = createCopaDoBrasilCup({ year: cupYear, leagueMatches: () => provider.getMatches(), leagueTeams });
-const serieB = createSerieB({ year: cupYear });
+// A página do time da Série B mostra também a Copa do Brasil (os ids da ESPN batem)
+const serieB = createSerieB({ year: cupYear, cups: [(id) => copaDoBrasilCup.teamSummary(id)] });
 const sulamericanaCup = createSulamericanaCup({
   year: cupYear,
   extraMatches: async () => [...(await provider.getMatches()), ...(await libertadoresCup.matches().catch(() => [] as Match[]))],
@@ -344,6 +346,24 @@ async function getAnalysis(): Promise<Analysis> {
 }
 
 const app = express();
+// Respostas comprimidas (gzip): a página e os dados chegam bem menores no 4G
+app.use(compression());
+
+// Código da página: os arquivos de public/js juntos, nesta ordem, num download só
+const PAGE_SCRIPTS = ['base', 'classificacao', 'destaque', 'jogos', 'evolucao', 'acertos', 'time', 'scout', 'artilharia', 'jogo', 'agenda', 'serieb', 'copas', 'ese', 'compartilhar', 'alertas', 'navegacao', 'aovivo'];
+const PUBLIC_DIR = path.join(import.meta.dirname, '..', 'public');
+let pageBundle: Promise<string> | null = null;
+function buildBundle() {
+  return Promise.all(PAGE_SCRIPTS.map((name) => readFile(path.join(PUBLIC_DIR, 'js', `${name}.js`), 'utf8'))).then((files) =>
+    files.map((code, i) => `// ---------- js/${PAGE_SCRIPTS[i]}.js ----------\n${code}`).join('\n'),
+  );
+}
+app.get('/app.js', (_req, res, next) => {
+  // Em produção junta uma vez; no computador, a cada pedido (para ver as mudanças na hora)
+  (process.env.NODE_ENV === 'production' ? (pageBundle ??= buildBundle()) : buildBundle())
+    .then((code) => res.type('application/javascript').set('Cache-Control', 'no-cache').send(code))
+    .catch(next);
+});
 // "no-cache": o navegador (principalmente o do celular) sempre confere se há versão
 // nova da página, do CSS e do JS antes de usar a cópia guardada
 app.use(express.static(path.join(import.meta.dirname, '..', 'public'), { setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));

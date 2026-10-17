@@ -1,5 +1,7 @@
 // ---------- Navegação ----------
 
+const CHART_TABS = new Set(['evolucao', 'acertos', 'time', 'scout', 'jogador', 'b-time']);
+
 const loaders = {
   tabela: loadOverview,
   jogos: loadMatches,
@@ -18,6 +20,7 @@ const loaders = {
   agenda: loadAgenda,
   'b-tabela': loadBTable,
   'b-jogos': loadBMatches,
+  'b-time': loadBTeam,
   ese: loadWhatif,
 };
 
@@ -39,7 +42,9 @@ async function refresh() {
     const hero = loadHero();
     if (state.comp === 'bsa' && !state.metaSet && state.tab !== 'tabela') api('/api/overview').then(setMeta, () => {});
     if (isCup() && state.tab === 'jogo') libMeta().catch(() => {});
-    if (state.comp === 'serieb' && state.tab === 'jogo') bMeta().catch(() => {});
+    if (state.comp === 'serieb' && ['jogo', 'b-time', 'ese'].includes(state.tab)) bMeta().catch(() => {});
+    // Telas com gráfico: baixa a biblioteca antes (só na primeira vez)
+    if (CHART_TABS.has(state.tab)) await ensureChart();
     await loaders[state.tab]();
     await hero;
   } catch (err) {
@@ -73,8 +78,12 @@ function applyRoute() {
         window.scrollTo(0, 0);
       }
       state.jogo.id = jogoId;
+    } else if (id === 'time' && jogoId) {
+      state.tab = 'b-time';
+      if (state.b.teamId !== jogoId) window.scrollTo(0, 0);
+      state.b.teamId = jogoId;
     } else {
-      state.tab = id === 'jogos' ? 'b-jogos' : 'b-tabela';
+      state.tab = id === 'jogos' ? 'b-jogos' : id === 'ese' ? 'ese' : 'b-tabela';
       document.title = 'Série B · Painel';
     }
   } else if (isCup()) {
@@ -124,7 +133,7 @@ function applyRoute() {
   $('#brand-nome').textContent = compName();
   document.querySelectorAll('.comp-card').forEach((c) => c.classList.toggle('on', c.dataset.comp === state.comp));
   let activeTab = state.tab === 'jogador' ? 'scout' : state.tab === 'jogo' ? 'jogos' : state.tab;
-  if (state.comp === 'serieb') activeTab = state.tab === 'jogo' ? 'serieb/jogos' : state.tab.replace('b-', 'serieb/');
+  if (state.comp === 'serieb') activeTab = state.tab === 'jogo' ? 'serieb/jogos' : state.tab === 'ese' ? 'serieb/ese' : state.tab === 'b-time' ? 'serieb/tabela' : state.tab.replace('b-', 'serieb/');
   if (isCup()) {
     const c = state.comp;
     activeTab = state.tab === 'jogo' ? `${c}/jogos` : state.tab === 'lib-time' ? `${c}/${CUP_INFO[c].pages.includes('grupos') ? 'grupos' : 'chave'}` : state.tab.replace('lib-', `${c}/`);

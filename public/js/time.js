@@ -208,12 +208,12 @@ function renderTeamStreaks(d) {
   $('#team-streaks').innerHTML = `<dl class="facts">${items.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 }
 
-function renderTeamResults(d) {
+function renderTeamResults(d, target = '#team-results') {
   if (!d.results.length) {
-    $('#team-results').innerHTML = '<div class="empty">Nenhum jogo encerrado ainda.</div>';
+    $(target).innerHTML = '<div class="empty">Nenhum jogo encerrado ainda.</div>';
     return;
   }
-  $('#team-results').innerHTML = `<div class="table-wrap"><table>
+  $(target).innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Rodada</th><th>Data</th><th class="left">Adversário</th><th>Placar</th><th></th></tr></thead>
     <tbody>${d.results
       .map((r) => {
@@ -232,9 +232,9 @@ function renderTeamResults(d) {
 }
 
 // O mesmo time nas copas que ele joga: situação, chance de título e link para a campanha
-function renderTeamCups(d) {
-  $('#team-cups-box').hidden = !d.cups.length;
-  $('#team-cups').innerHTML = d.cups
+function renderTeamCups(d, box = '#team-cups-box', list = '#team-cups') {
+  $(box).hidden = !d.cups.length;
+  $(list).innerHTML = d.cups
     .map((c) => {
       const situation = c.won
         ? 'Campeão'

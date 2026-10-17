@@ -899,3 +899,4 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
   /* Celular: tema e sino lado a lado no canto (depois da regra do computador, para valer) */
   .bell.tema { right: 58px; }
 }
+.fonte-aviso.offline { background: #cfd8e3; }

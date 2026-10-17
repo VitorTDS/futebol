@@ -214,7 +214,7 @@ async function shareWhatif() {
       const b = base.get(o.teamId);
       const diffs = [
         ['título', o.title, b.title],
-        ['Libertadores', o.libertadores, b.libertadores],
+        [eseSpotLabel(), o.libertadores, b.libertadores],
         ['rebaixamento', o.relegation, b.relegation],
       ].sort((x, y) => Math.abs(y[1] - y[2]) - Math.abs(x[1] - x[2]));
       return { team: teamsById.get(o.teamId), main: diffs[0], size: Math.abs(diffs[0][1] - diffs[0][2]) };
@@ -225,7 +225,7 @@ async function shareWhatif() {
   const pickRows = picks.slice(0, 8);
   const top = 230;
   const height = top + 60 + pickRows.length * 60 + 120 + changes.length * 90 + 120;
-  const { c, g, t } = await shareCanvas(height, 'E se…?', 'Brasileirão · simulação com os meus palpites');
+  const { c, g, t } = await shareCanvas(height, 'E se…?', `${compName(ese.comp)} · simulação com os meus palpites`);
   g.textAlign = 'left';
   g.fillStyle = t.accent;
   g.font = '34px "Archivo Black", sans-serif';
@@ -256,7 +256,7 @@ async function shareWhatif() {
     g.fillText(pp === 0 ? 'igual' : `${pp > 0 ? '▲ +' : '▼ '}${pp} pts`, SHARE_W - 70, yy + 42);
     g.textAlign = 'left';
   });
-  await sendImage(c, 'e-se.png', 'E se…? Meu cenário no Brasileirão');
+  await sendImage(c, 'e-se.png', `E se…? Meu cenário na ${compName(ese.comp)}`);
 }
 
 for (const [sel, fn] of [

@@ -1,5 +1,6 @@
-// Os arquivos de public/js são scripts comuns carregados em ordem pelo index.html:
-// dividem o mesmo escopo global (o que um declara, os seguintes enxergam).
+// Os arquivos de public/js são juntados pelo servidor num só (/app.js), na ordem de
+// PAGE_SCRIPTS em src/server.ts: dividem o mesmo escopo global (o que um declara,
+// os seguintes enxergam).
 
 const REFRESH_MS = 60_000;
 
@@ -13,12 +14,33 @@ const state = {
 
 // Cores dos gráficos seguem o tema (claro ou escuro)
 function chartColors() {
+  if (!window.Chart) return;
   const css = getComputedStyle(document.documentElement);
   Chart.defaults.color = css.getPropertyValue('--muted').trim() || '#6b6a5c';
   Chart.defaults.borderColor = css.getPropertyValue('--border').trim() || '#e2dccb';
 }
-chartColors();
-Chart.defaults.font.family = 'Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+// A biblioteca de gráficos (60 KB) só é baixada quando uma tela com gráfico abre
+const CHART_URL = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+let chartLoading = null;
+function ensureChart() {
+  if (window.Chart) return Promise.resolve();
+  chartLoading ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = CHART_URL;
+    s.onload = () => {
+      Chart.defaults.font.family = 'Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+      chartColors();
+      resolve();
+    };
+    s.onerror = () => {
+      chartLoading = null;
+      reject(new Error('não foi possível carregar os gráficos'));
+    };
+    document.head.append(s);
+  });
+  return chartLoading;
+}
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -62,8 +84,7 @@ const compName = (comp = state.comp) => CUP_INFO[comp]?.name ?? COMP_NAMES[comp]
 const compApi = (p, comp = state.comp) => (comp === 'bsa' ? `/api${p}` : `/api/${comp}${p}`);
 // Na Libertadores, todo clube (brasileiro ou não) tem a sua página
 // `comp` muda o campeonato do link (ex.: jogo de copa na página do time no Brasileirão)
-// Série B não tem página de time: o nome fica sem link (null)
-const teamHref = (id, comp = state.comp) => (comp === 'serieb' ? null : comp in CUP_INFO ? `#/${comp}/time/${id}` : `#/time/${id}`);
+const teamHref = (id, comp = state.comp) => (comp === 'bsa' ? `#/time/${id}` : `#/${comp}/time/${id}`);
 const jogoHref = (id, comp = state.comp) => (comp === 'bsa' ? `#/jogo/${id}` : `#/${comp}/jogo/${id}`);
 
 const escapeHtml = (s) =>
@@ -73,8 +94,32 @@ async function api(path) {
   const res = await fetch(path);
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+  // Sem internet: o service worker devolveu a cópia guardada (e diz de quando é)
+  showOffline(res.headers.get('x-painel-offline'));
   return body;
 }
+
+/** Aviso "sem internet": some sozinho quando uma resposta volta a vir da rede */
+function showOffline(savedAt) {
+  const el = $('#offline-aviso');
+  if (!savedAt) {
+    if (navigator.onLine) el.hidden = true;
+    return;
+  }
+  const when = new Date(savedAt);
+  const hora = Number.isNaN(when.getTime()) ? '' : ` de ${dayName(when).toLowerCase()} às ${when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  el.textContent = `📵 Sem internet: mostrando os dados guardados${hora}.`;
+  el.hidden = false;
+}
+
+window.addEventListener('offline', () => {
+  $('#offline-aviso').textContent = '📵 Sem internet: mostrando os dados guardados.';
+  $('#offline-aviso').hidden = false;
+});
+window.addEventListener('online', () => {
+  $('#offline-aviso').hidden = true;
+  if (typeof refresh === 'function') refresh();
+});
 
 /**
  * Dia do jogo pelo relógio do aparelho: "Hoje", "Amanhã", "Ontem" ou o dia da
@@ -196,7 +241,7 @@ function applyTheme(theme) {
   $('#tema').setAttribute('aria-label', `Tema: ${THEME_TEXT[theme]}`);
   // Gráficos já desenhados ganham as cores novas
   chartColors();
-  for (const chart of Object.values(Chart.instances)) {
+  for (const chart of Object.values(window.Chart?.instances ?? {})) {
     for (const axis of Object.values(chart.options.scales ?? {})) {
       axis.ticks && (axis.ticks.color = Chart.defaults.color);
       axis.grid && (axis.grid.color = Chart.defaults.borderColor);
