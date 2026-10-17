@@ -244,6 +244,136 @@ td.prob.num { color: var(--text); font-size: 14px; min-width: 64px; }
 }
 .watch:hover { transform: translateY(-1px); }
 
+/* Página do jogo */
+body[data-tab="jogo"] .destaque { display: none; }
+.ver-detalhes { display: inline-block; margin-top: 10px; color: var(--amarelo); font-weight: 800; font-size: 13px; text-decoration: none; border-bottom: 2px solid transparent; }
+.ver-detalhes:hover { border-bottom-color: var(--amarelo); }
+.ver-jogo { align-self: flex-end; font-size: 12px; font-weight: 800; color: var(--verde); text-decoration: none; }
+.match[data-jogo], tr.linha-jogo { cursor: pointer; }
+
+.jogo-header { background: var(--lousa); color: var(--giz); border-radius: 16px; padding: 18px 16px 16px; text-align: center; box-shadow: 0 4px 0 #13261c; }
+.jh-status { font-size: 13px; font-weight: 700; color: var(--giz-mute); }
+.jh-status .live-tag { color: #ff8b96; }
+.jh-placar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 12px; }
+.jh-time { display: flex; flex-direction: column; align-items: center; gap: 6px; color: inherit; text-decoration: none; min-width: 0; }
+.jh-time img, .jh-time .badge { width: 72px; height: 72px; object-fit: contain; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.3)); }
+.jh-time b { font-family: "Archivo Black"; text-transform: uppercase; font-size: 18px; }
+.jh-time small { color: var(--giz-mute); font-size: 12px; }
+.jh-gols { font-family: "Archivo Black"; font-size: 60px; line-height: 1; white-space: nowrap; }
+.jh-gols span { color: var(--amarelo); margin: 0 8px; }
+.jh-gols .jh-hora { font-size: 36px; margin: 0; }
+.jh-autores { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--giz-mute); }
+.jh-autores ul { list-style: none; margin: 0; padding: 0; }
+.jh-autores ul:first-child { text-align: right; }
+.jh-autores ul:last-child { text-align: left; }
+.jh-meta { margin-top: 12px; font-size: 12px; color: var(--giz-mute); }
+
+.jogo-tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 4px; overflow-x: auto; margin: 14px 0; padding: 6px 0; background: var(--papel); scrollbar-width: none; }
+.jogo-tabs::-webkit-scrollbar { display: none; }
+.jogo-tabs button {
+  flex: 1 0 auto; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 14px; min-height: 44px; border-radius: 999px; cursor: pointer;
+  background: #fff; color: var(--text); border: 2px solid var(--tinta);
+}
+.jogo-tabs button.on { background: var(--amarelo); box-shadow: 0 3px 0 var(--tinta); }
+
+.jogo-body { display: flex; flex-direction: column; gap: 14px; }
+.card-j { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.08); }
+.card-j h3 { margin: 0 0 12px; font-size: 16px; }
+.card-j h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; }
+.card-j h4 img, .card-j h4 .badge { width: 24px; height: 24px; object-fit: contain; }
+.sub-j { margin: 14px 0 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.placares-j { display: flex; flex-wrap: wrap; gap: 6px; }
+.probbar.mercado { opacity: 0.7; }
+.vazio-j p { margin: 0; color: var(--muted); }
+.fonte-j { margin-top: 18px; font-size: 12px; }
+.fonte-j a { color: inherit; }
+
+/* Lances em linha do tempo: mandante à esquerda, visitante à direita */
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--papel-2); transform: translateX(-1px); }
+.timeline li { display: grid; grid-template-columns: 1fr 52px 1fr; align-items: center; padding: 6px 0; position: relative; }
+.ev-min { grid-column: 2; grid-row: 1; justify-self: center; background: #fff; border: 2px solid var(--tinta); border-radius: 999px; font-size: 11px; font-weight: 800; padding: 1px 7px; z-index: 1; }
+.ev-txt { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.ev-txt > div { display: flex; flex-direction: column; min-width: 0; }
+.ev-txt small { color: var(--muted); font-size: 11px; }
+.ev-txt .ev-time { display: none; }
+.timeline li.home .ev-txt { grid-column: 1; grid-row: 1; justify-content: flex-start; text-align: right; flex-direction: row-reverse; }
+.timeline li.away .ev-txt { grid-column: 3; grid-row: 1; }
+.timeline li.goal, .timeline li.penalty, .timeline li.own-goal { font-weight: 800; }
+.ev-ico { font-size: 16px; line-height: 1; }
+.ev-ico.contra { filter: grayscale(1) brightness(0.6); }
+.ev-ico.troca { color: var(--azul); font-weight: 800; }
+.entra { color: var(--verde); font-weight: 700; }
+.sai { color: var(--verm); }
+.cartao { display: inline-block; width: 11px; height: 15px; border-radius: 2px; flex-shrink: 0; }
+.cartao.amarelo { background: #f7c600; }
+.cartao.vermelho { background: var(--verm); }
+
+/* O que está em jogo */
+.stakes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stake-time table td, .stake-time table th { padding: 6px 4px; font-size: 13px; }
+.stake-time tr.hoje td { color: var(--muted); }
+
+/* Estatísticas em barras, como no Google */
+.stat-legenda { display: flex; justify-content: space-between; font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+.stat-legenda span { display: flex; align-items: center; gap: 6px; }
+.stat-legenda img, .stat-legenda .badge { width: 22px; height: 22px; object-fit: contain; }
+.stat-j { padding: 8px 0; border-top: 1px dotted #e2dccb; }
+.stat-j-top { display: grid; grid-template-columns: 60px 1fr 60px; align-items: center; font-size: 13px; }
+.stat-j-top span { text-align: center; color: var(--muted); font-weight: 600; }
+.stat-j-top b:last-child { text-align: right; }
+.stat-j-top b.mais { font-size: 15px; }
+.stat-j-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 5px; }
+.stat-j-bar > div { height: 7px; background: var(--papel-2); border-radius: 4px; overflow: hidden; display: flex; }
+.stat-j-bar .h { justify-content: flex-end; }
+.stat-j-bar > div > div { height: 100%; width: 0; border-radius: 4px; transition: width 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.destaques { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.destaques dl { margin: 0; display: grid; gap: 2px; font-size: 13px; }
+.destaques dt { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 6px; }
+.destaques dd { margin: 0; }
+
+/* Escalações: campinho com o visitante em cima e o mandante embaixo */
+.campo-rot { display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 800; font-size: 14px; padding: 6px 0; }
+.campo-rot img, .campo-rot .badge { width: 24px; height: 24px; object-fit: contain; }
+.campo-rot small { color: var(--muted); }
+.gramado-j {
+  position: relative; border-radius: 10px; padding: 10px 4px; display: flex; flex-direction: column; gap: 4px;
+  background: repeating-linear-gradient(0deg, #2e7d4f 0 44px, #2a7449 44px 88px); border: 3px solid #fff; box-shadow: inset 0 0 0 2px #2a7449;
+}
+.meio-campo { height: 2px; background: rgba(255, 255, 255, 0.7); margin: 6px -4px; position: relative; }
+.meio-campo::after { content: ""; position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; border: 2px solid rgba(255, 255, 255, 0.7); border-radius: 50%; transform: translate(-50%, -50%); }
+.meio { display: flex; flex-direction: column; gap: 10px; padding: 6px 0; }
+.linha-j { display: flex; justify-content: space-around; }
+.jog { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 70px; text-align: center; color: #fff; position: relative; z-index: 1; }
+.jog .num { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); }
+.jog .nome { font-size: 11px; font-weight: 700; line-height: 1.1; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); overflow: hidden; text-overflow: ellipsis; max-width: 100%; white-space: nowrap; }
+.marcas { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.marcas i { font-style: normal; font-size: 10px; font-weight: 800; }
+.jog .marcas i { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.m-sub.entra { color: #7dffa8; }
+.m-sub.sai { color: #ff9aa6; }
+.lista-j .m-sub.entra { color: var(--verde); text-shadow: none; }
+.lista-j .m-sub.sai { color: var(--verm); text-shadow: none; }
+.reservas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.lista-j { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.lista-j li { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px dotted #e2dccb; }
+.num-s { width: 22px; text-align: right; color: var(--muted); font-weight: 800; flex-shrink: 0; }
+.pos-s { color: var(--muted); font-size: 11px; }
+
+/* Confronto */
+.h2h-resumo { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; gap: 8px; }
+.h2h-resumo b { display: block; font-family: "Archivo Black"; font-size: 30px; }
+.h2h-resumo span { font-size: 12px; color: var(--muted); font-weight: 700; }
+.h2h { list-style: none; margin: 0; padding: 0; }
+.h2h li { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px dotted #e2dccb; font-size: 13px; }
+.h2h li small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; text-align: center; }
+.h2h-l { text-align: right; }
+.ultimos-j { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.ultimos-j li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px dotted #e2dccb; }
+.ultimos-j li > span:nth-child(2) { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.ultimos-j img, .ultimos-j .badge { width: 18px; height: 18px; object-fit: contain; }
+.mini-tab tr.destaque-t td { background: #fff4c2; font-weight: 800; }
+
 /* Alertas de gol */
 .topo { position: relative; padding-right: 84px; }
 .bell {
@@ -496,6 +626,16 @@ td.metric { font-variant-numeric: tabular-nums; }
   .ese-times b { white-space: normal; }
   .bell { top: 18px; right: 14px; width: 38px; height: 38px; }
   .topo { padding-right: 60px; }
+  .jh-time img, .jh-time .badge { width: 52px; height: 52px; }
+  .jh-time b { font-size: 14px; }
+  .jh-gols { font-size: 44px; }
+  .jh-gols .jh-hora { font-size: 28px; }
+  .stakes, .destaques, .reservas { grid-template-columns: 1fr; }
+  .jog { width: 58px; }
+  .jog .num { width: 26px; height: 26px; font-size: 12px; }
+  .jog .nome { font-size: 10px; }
+  .jogo-tabs { margin: 12px -16px; padding: 6px 16px; }
+  .jogo-tabs button { font-size: 13px; padding: 8px 12px; }
   .ese-grid { grid-template-columns: 1fr; }
   .ese-focus { grid-template-columns: repeat(2, 1fr); }
   .ese-meu { grid-column: 1 / -1; flex-direction: row; }

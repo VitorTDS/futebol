@@ -8,13 +8,14 @@ import { createMockPlayerProvider } from './data/players/mock.ts';
 import { backtest, type BacktestResult } from './model/backtest.ts';
 import { calibrateTimeDecay, halfLife, MIN_MATCHES, type Calibration } from './model/calibration.ts';
 import { buildBackground, fitModel, MODEL_KINDS, type Background } from './model/models.ts';
-import { MODEL_LABELS, predictMatch, type FittedModel, type ModelKind } from './model/prediction.ts';
+import { MODEL_LABELS, predictMatch, topScores, type FittedModel, type ModelKind } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { createCupSimulator } from './model/cups.ts';
 import { isMatchTime, liveEvents } from './model/liveEvents.ts';
-import { pickedScores } from './model/whatif.ts';
+import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026 } from './data/copas.ts';
+import { getMatchCenter } from './data/espn.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
@@ -357,6 +358,82 @@ app.post(
     // O modelo (força dos times) fica o mesmo: só os resultados escolhidos mudam
     const outlook = runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED, forced);
     res.json({ runs: WHATIF_RUNS, teams: outlook.teams, base: whatifBaseline(a), zones: outlook.zones.likely });
+  }),
+);
+
+// ---------- Página do jogo ----------
+
+const stakesCache = new Map<string, Record<Pick, TeamOutlook[]>>();
+
+/** Como ficam as chances de todos se o jogo terminar em vitória do mandante, empate ou vitória do visitante. */
+function matchStakes(a: Analysis, m: Match): Record<Pick, TeamOutlook[]> {
+  const key = `${a.updatedAt}:${m.id}`;
+  let value = stakesCache.get(key);
+  if (!value) {
+    value = {} as Record<Pick, TeamOutlook[]>;
+    for (const pick of ['H', 'D', 'A'] as Pick[]) {
+      const r = applyPick(m, pick);
+      const forced = new Map([[m.id, [r.homeGoals!, r.awayGoals!] as [number, number]]]);
+      value[pick] = runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED, forced).teams;
+    }
+    if (stakesCache.size > 50) stakesCache.clear();
+    stakesCache.set(key, value);
+  }
+  return value;
+}
+
+app.get(
+  '/api/jogo/:id',
+  route(async (req, res) => {
+    const a = await getAnalysis();
+    const m = a.matches.find((x) => x.id === Number(req.params.id));
+    if (!m) {
+      res.status(404).json({ error: 'Jogo não encontrado' });
+      return;
+    }
+    const finished = isFinished(m);
+    const side = (team: Team) => ({
+      standing: a.standings.find((r) => r.team.id === team.id),
+      outlook: a.outlook.get(team.id),
+      // Últimos 5 jogos antes deste, do mais recente para o mais antigo
+      last: teamResults(team.id, a.matches)
+        .filter((r) => r.match.utcDate < m.utcDate)
+        .slice(-5)
+        .reverse()
+        .map((r) => ({ date: r.match.utcDate, opponent: r.opponent, home: r.home, goalsFor: r.goalsFor, goalsAgainst: r.goalsAgainst, result: r.result })),
+    });
+
+    let stakes = null;
+    if (!finished) {
+      const s = matchStakes(a, m);
+      const pick = (outlooks: TeamOutlook[]) => ({
+        home: outlooks.find((o) => o.teamId === m.home.id),
+        away: outlooks.find((o) => o.teamId === m.away.id),
+      });
+      stakes = { base: pick(whatifBaseline(a)), H: pick(s.H), D: pick(s.D), A: pick(s.A) };
+    }
+
+    // A ESPN é opcional: se falhar, a página mostra o resto
+    let espn = null;
+    let espnError: string | null = null;
+    try {
+      espn = await getMatchCenter(m);
+    } catch (err) {
+      espnError = (err as Error).message;
+    }
+
+    res.json({
+      match: { ...m, prediction: finished ? null : predictMatch(a.model, m) },
+      currentMatchday: a.currentMatchday,
+      home: side(m.home),
+      away: side(m.away),
+      topScores: finished ? null : topScores(a.model, m),
+      stakes,
+      standings: a.standings.map((r) => ({ position: r.position, team: r.team, played: r.played, points: r.points, goalDiff: r.goalDiff })),
+      zones: a.zones.likely,
+      espn,
+      espnError,
+    });
   }),
 );
 

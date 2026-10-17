@@ -111,6 +111,16 @@ export function remainingGoals(model: FittedModel, m: Match) {
   };
 }
 
+/** Placares finais mais prováveis (em jogo ao vivo, já somando o placar atual). */
+export function topScores(model: FittedModel, m: Match, n = 6): { home: number; away: number; p: number }[] {
+  const g = remainingGoals(model, m);
+  const list: { home: number; away: number; p: number }[] = [];
+  scoreMatrix(g.lh, g.la, g.rho).forEach((row, h) =>
+    row.forEach((p, a) => list.push({ home: h + g.currentHome, away: a + g.currentAway, p })),
+  );
+  return list.sort((x, y) => y.p - x.p).slice(0, n);
+}
+
 export function predictMatch(model: FittedModel, m: Match): Prediction {
   const g = remainingGoals(model, m);
   return predict(g.lh, g.la, g.rho, g.currentHome, g.currentAway);
