@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cached } from './cache.ts';
 import { isMatchTime } from '../model/liveEvents.ts';
+import { keepFinished, staleMatchdays } from './repair.ts';
 import type { DataProvider, Match, MatchStatus, Scorer, Team } from '../types.ts';
 
 const BASE_URL = 'https://api.football-data.org/v4';
@@ -87,8 +88,16 @@ export function createFootballDataProvider(opts: {
     return res.json() as Promise<T>;
   }
 
-  async function fetchMatches(season?: string): Promise<Match[]> {
-    const data = await get<{ matches: ApiMatch[] }>(`/competitions/${opts.competition}/matches`, season);
+  // Jogos adiados, suspensos ou cancelados: não são "atrasados", só não têm data
+  const inactive = new Set<number>();
+
+  async function fetchMatches(season?: string, matchday?: number): Promise<Match[]> {
+    const query = matchday ? `?matchday=${matchday}` : '';
+    const data = await get<{ matches: ApiMatch[] }>(`/competitions/${opts.competition}/matches${query}`, season);
+    for (const m of data.matches) {
+      if (['POSTPONED', 'SUSPENDED', 'CANCELLED'].includes(m.status)) inactive.add(m.id);
+      else inactive.delete(m.id);
+    }
     return data.matches.map(
       (m): Match => ({
         id: m.id,
@@ -122,9 +131,48 @@ export function createFootballDataProvider(opts: {
   }
 
   let matchTime = false;
+  // Resultados encerrados já vistos, guardados em disco (ver repair.ts)
+  const finishedFile = path.join(CACHE_DIR, `football-data-${opts.competition}-encerrados.json`);
+  let finishedMemory: Map<number, Match> | null = null;
+
+  async function loadFinished(): Promise<Map<number, Match>> {
+    if (!finishedMemory) {
+      try {
+        const saved = JSON.parse(await readFile(finishedFile, 'utf8')) as Match[];
+        finishedMemory = new Map(saved.map((m) => [m.id, m]));
+      } catch {
+        finishedMemory = new Map();
+      }
+    }
+    return finishedMemory;
+  }
+
+  async function currentMatches(): Promise<Match[]> {
+    const memory = await loadFinished();
+    let { matches, learned } = keepFinished(await fetchMatches(), memory);
+
+    // Jogo que já devia ter acabado e veio sem resultado: busca só a rodada dele
+    // de novo (a consulta por rodada costuma estar certa). No máximo 2 por vez,
+    // por causa do limite de requisições do plano grátis.
+    for (const md of staleMatchdays(matches, inactive).slice(0, 2)) {
+      const fixed = keepFinished(await fetchMatches(undefined, md), memory);
+      if (fixed.learned) {
+        learned = true;
+        console.warn(`football-data: rodada ${md} veio sem resultados na lista completa; corrigida pela consulta da rodada.`);
+      }
+      matches = keepFinished(matches, memory).matches;
+    }
+
+    if (learned) {
+      await mkdir(CACHE_DIR, { recursive: true });
+      await writeFile(finishedFile, JSON.stringify([...memory.values()]));
+    }
+    return matches;
+  }
+
   const getMatches = () =>
     cached('matches', matchTime ? LIVE_TTL_MS : TTL_MS, async () => {
-      const matches = await fetchMatches();
+      const matches = await currentMatches();
       matchTime = isMatchTime(matches);
       return matches;
     });

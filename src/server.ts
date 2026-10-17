@@ -12,6 +12,7 @@ import { MODEL_LABELS, predictMatch, type FittedModel, type ModelKind } from './
 import { mulberry32 } from './model/random.ts';
 import { createCupSimulator } from './model/cups.ts';
 import { isMatchTime, liveEvents } from './model/liveEvents.ts';
+import { pickedScores } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026 } from './data/copas.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
@@ -210,6 +211,30 @@ function modelLabel(calib: CalibrationState): string {
   return `${MODEL_LABELS['dixon-coles']} (${days ? `meia-vida de ${days} dias` : 'sem decaimento'})`;
 }
 
+/** As copas de 2026 só valem para o Brasileirão real de 2026. */
+function cupsApply(matches: Match[]): boolean {
+  const season = Math.min(...matches.map((m) => new Date(m.utcDate).getUTCFullYear()));
+  return provider.name === 'football-data.org' && config.competition === 'BSA' && season === 2026;
+}
+
+function runSimulation(
+  teams: Team[],
+  matches: Match[],
+  model: FittedModel,
+  withCups: boolean,
+  runs: number,
+  seed = Date.now(),
+  forced?: Map<number, [number, number]>,
+) {
+  return simulateSeason(teams, matches, model, {
+    runs,
+    zones: config.zones,
+    rng: mulberry32(seed),
+    forced,
+    cups: withCups ? createCupSimulator(model, teams.map((t) => t.id), CUPS_2026) : undefined,
+  });
+}
+
 /** Recalcula tabela, modelo e simulação só quando algum placar muda. */
 async function getAnalysis(): Promise<Analysis> {
   const matches = await provider.getMatches();
@@ -221,15 +246,8 @@ async function getAnalysis(): Promise<Analysis> {
   const calib = currentCalibration(teams, matches, bg.background);
   const model = fitModel(config.model, teams, matches, new Date().toISOString(), calib.decay, bg.background);
   const history = getHistory(teams, matches, calib, bg.background);
-  // As copas de 2026 só valem para o Brasileirão real de 2026
-  const season = Math.min(...matches.map((m) => new Date(m.utcDate).getUTCFullYear()));
-  const withCups = provider.name === 'football-data.org' && config.competition === 'BSA' && season === 2026;
-  const outlook = simulateSeason(teams, matches, model, {
-    runs: config.simulations,
-    zones: config.zones,
-    rng: mulberry32(Date.now()),
-    cups: withCups ? createCupSimulator(model, teams.map((t) => t.id), CUPS_2026) : undefined,
-  });
+  const withCups = cupsApply(matches);
+  const outlook = runSimulation(teams, matches, model, withCups, config.simulations);
   const matchdays = matches.map((m) => m.matchday);
 
   const value: Analysis = {
@@ -254,7 +272,9 @@ async function getAnalysis(): Promise<Analysis> {
 }
 
 const app = express();
-app.use(express.static(path.join(import.meta.dirname, '..', 'public')));
+// "no-cache": o navegador (principalmente o do celular) sempre confere se há versão
+// nova da página, do CSS e do JS antes de usar a cópia guardada
+app.use(express.static(path.join(import.meta.dirname, '..', 'public'), { setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));
 
 const route = (fn: (req: Request, res: Response) => Promise<void>) => (req: Request, res: Response, next: NextFunction) =>
   fn(req, res).catch(next);
@@ -294,6 +314,49 @@ app.get(
       watchUrl: config.watchUrl,
       matches,
     });
+  }),
+);
+
+// ---------- Simulador "e se" ----------
+
+const WHATIF_RUNS = 4000;
+// Mesma sequência de sorteios no cenário-base e no "e se": a diferença entre os
+// dois vem só dos palpites, não do acaso da simulação.
+const WHATIF_SEED = 2026;
+let whatifBase: { analysis: Analysis; teams: TeamOutlook[] } | null = null;
+
+function whatifBaseline(a: Analysis): TeamOutlook[] {
+  if (whatifBase?.analysis !== a) {
+    whatifBase = { analysis: a, teams: runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED).teams };
+  }
+  return whatifBase.teams;
+}
+app.get(
+  '/api/whatif',
+  route(async (_req, res) => {
+    const a = await getAnalysis();
+    const pending = a.matches
+      .filter((m) => !isFinished(m))
+      .sort((x, y) => x.matchday - y.matchday || x.utcDate.localeCompare(y.utcDate))
+      .map((m) => ({ ...m, prediction: predictMatch(a.model, m) }));
+    res.json({
+      currentMatchday: a.currentMatchday,
+      totalMatchdays: a.totalMatchdays,
+      matches: pending,
+      standings: a.standings.map((row) => ({ position: row.position, team: row.team, points: row.points, outlook: a.outlook.get(row.team.id) })),
+    });
+  }),
+);
+
+app.post(
+  '/api/whatif',
+  express.json({ limit: '16kb' }),
+  route(async (req, res) => {
+    const a = await getAnalysis();
+    const forced = pickedScores(a.matches, req.body?.picks ?? {});
+    // O modelo (força dos times) fica o mesmo: só os resultados escolhidos mudam
+    const outlook = runSimulation(a.teams, a.matches, a.model, a.withCups, WHATIF_RUNS, WHATIF_SEED, forced);
+    res.json({ runs: WHATIF_RUNS, teams: outlook.teams, base: whatifBaseline(a), zones: outlook.zones.likely });
   }),
 );
 

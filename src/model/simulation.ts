@@ -24,6 +24,8 @@ export interface SimulationOptions {
   rng: Rng;
   /** Sorteia as copas que dão vaga extra; sem isso, vale só a tabela */
   cups?: (rng: Rng) => CupOutcomes;
+  /** Placar final fixo de alguns jogos pendentes (simulador "e se"), por id do jogo */
+  forced?: Map<number, [number, number]>;
 }
 
 /** Até que posição vão as vagas, conforme as copas terminarem. */
@@ -52,7 +54,7 @@ export function simulateSeason(teams: Team[], matches: Match[], model: FittedMod
   const baseGf = new Int32Array(T);
 
   // Para cada jogo pendente, a distribuição acumulada dos placares (para sortear)
-  const pending: { h: number; a: number; cdf: Float64Array; hg: number; ag: number }[] = [];
+  const pending: { h: number; a: number; cdf: Float64Array; hg: number; ag: number; forced?: [number, number] }[] = [];
 
   for (const m of matches) {
     const h = index.get(m.home.id)!;
@@ -70,7 +72,7 @@ export function simulateSeason(teams: Team[], matches: Match[], model: FittedMod
         cdf[hg * SIDE + ag] = acc;
       }),
     );
-    pending.push({ h, a, cdf, hg: g.currentHome, ag: g.currentAway });
+    pending.push({ h, a, cdf, hg: g.currentHome, ag: g.currentAway, forced: opts.forced?.get(m.id) });
   }
 
   const pts = new Int32Array(T);
@@ -94,7 +96,13 @@ export function simulateSeason(teams: Team[], matches: Match[], model: FittedMod
     gf.set(baseGf);
 
     for (const p of pending) {
+      // O sorteio acontece mesmo com placar fixo, para a sequência de sorteios
+      // dos outros jogos ser a mesma com ou sem palpites
       const u = opts.rng();
+      if (p.forced) {
+        record(pts, wins, gd, gf, p.h, p.a, p.forced[0], p.forced[1]);
+        continue;
+      }
       let k = 0;
       while (k < p.cdf.length - 1 && p.cdf[k] < u) k++;
       record(pts, wins, gd, gf, p.h, p.a, p.hg + Math.floor(k / SIDE), p.ag + (k % SIDE));
