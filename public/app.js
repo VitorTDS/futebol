@@ -8,9 +8,9 @@ const state = {
   history: { matchday: null, first: 1, last: 1, accuracyChart: null, calibrationChart: null },
 };
 
-Chart.defaults.color = '#8ea398';
-Chart.defaults.borderColor = '#26372f';
-Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+Chart.defaults.color = '#6b6a5c';
+Chart.defaults.borderColor = '#e2dccb';
+Chart.defaults.font.family = 'Archivo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -40,9 +40,39 @@ function teamHtml(team, { short = false } = {}) {
 }
 
 function probCell(p, color) {
-  const alpha = Math.min(0.6, p * 0.8);
-  const bg = p > 0 ? `background: color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)` : '';
-  return `<td class="prob"><span class="prob-cell" style="${bg}">${pct(p)}</span></td>`;
+  return `<td class="prob"><span class="prob-cell"><span class="mini"><div data-w="${p}" style="background:${color}"></div></span><small>${pct(p)}</small></span></td>`;
+}
+
+// Barras com data-w (0 a 1) crescem até a largura certa no próximo quadro.
+function growBars(root = document) {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() =>
+      root.querySelectorAll('[data-w]').forEach((el) => (el.style.width = `${Math.max(0, +el.dataset.w) * 100}%`)),
+    ),
+  );
+}
+
+// Anima um número de 0 até o valor final.
+function countUp(el, target, ms = 900) {
+  const t0 = performance.now();
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / ms);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function probBar(p, cls = '') {
+  return `<div class="probbar ${cls}" title="Vitória mandante / empate / vitória visitante">
+    <div class="h" data-w="${p.pHome}"></div><div class="d" data-w="${p.pDraw}"></div><div class="a" data-w="${p.pAway}"></div>
+  </div>`;
+}
+
+function crestImg(team) {
+  return team.crest
+    ? `<img src="${escapeHtml(team.crest)}" alt="" loading="lazy" />`
+    : `<span class="badge">${escapeHtml(team.tla)}</span>`;
 }
 
 function showBanner(text, isError = false) {
@@ -54,15 +84,22 @@ function showBanner(text, isError = false) {
 
 // ---------- Classificação ----------
 
-async function loadOverview() {
-  const data = await api('/api/overview');
-  const { zones, standings } = data;
-  const total = standings.length;
-
+// Linha de informações no topo; aparece em qualquer aba.
+function setMeta(data) {
   const updated = new Date(data.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const bg = data.background;
   const bgText = bg.enabled && bg.seasons.length ? ` + ${bg.seasons.join(', ')}` : '';
   $('#meta').textContent = `Rodada ${data.currentMatchday} de ${data.totalMatchdays} · fonte: ${data.source} · modelo: ${data.model}${bgText} · atualizado às ${updated}`;
+  state.metaSet = true;
+}
+
+async function loadOverview() {
+  const data = await api('/api/overview');
+  const { zones, standings } = data;
+  const total = standings.length;
+  const bg = data.background;
+
+  setMeta(data);
   $('#sim-note').textContent = `· probabilidades a partir de ${data.simulations.toLocaleString('pt-BR')} simulações do restante do campeonato`;
 
   const notices = [];
@@ -86,20 +123,125 @@ async function loadOverview() {
       return `<tr class="${zoneClass(row.position)}">
         <td class="pos">${row.position}</td>
         <td class="left">${teamHtml(row.team)}</td>
-        <td class="points">${row.points}</td>
+        <td class="points" data-n="${row.points}">${row.points}</td>
         <td>${row.played}</td>
         <td>${row.won}</td>
         <td>${row.drawn}</td>
         <td>${row.lost}</td>
         <td>${row.goalDiff > 0 ? '+' : ''}${row.goalDiff}</td>
         <td class="hide-sm"><span class="form">${row.form.map((r) => `<span class="${r}">${r}</span>`).join('')}</span></td>
-        <td class="prob">${o.expectedPoints.toFixed(1).replace('.', ',')}</td>
-        ${probCell(o.title, 'var(--accent)')}
+        <td class="prob num">${o.expectedPoints.toFixed(1).replace('.', ',')}</td>
+        ${probCell(o.title, 'var(--titulo)')}
         ${probCell(o.libertadores, 'var(--lib)')}
         ${probCell(o.relegation, 'var(--reb)')}
       </tr>`;
     })
     .join('');
+
+  // Na primeira vez os pontos sobem do zero; nas atualizações seguintes não pisca.
+  if (!state.standingsAnimated) {
+    state.standingsAnimated = true;
+    document.querySelectorAll('#standings-body td.points').forEach((td) => countUp(td, +td.dataset.n));
+  }
+
+  renderRace(standings);
+  growBars($('#tabela'));
+  await loadStrip();
+}
+
+const RACES = { title: 'var(--titulo)', libertadores: 'var(--lib)', relegation: 'var(--reb)' };
+
+function renderRace(standings) {
+  for (const [key, color] of Object.entries(RACES)) {
+    const top = standings
+      .filter((r) => r.outlook[key] > 0)
+      .sort((a, b) => b.outlook[key] - a.outlook[key])
+      .slice(0, 6);
+    $(`#corrida-${key}`).innerHTML = top.length
+      ? top
+          .map(
+            (r) => `<a class="linha" href="#/time/${r.team.id}">${crestImg(r.team)}
+          <div class="trilho" style="--c:${color}"><div data-w="${r.outlook[key]}"></div><span>${escapeHtml(r.team.shortName)}</span></div>
+          <b>${pct(r.outlook[key])}</b></a>`,
+          )
+          .join('')
+      : '<p class="muted">Ninguém tem chance.</p>';
+  }
+}
+
+// Faixa com os jogos da rodada atual, na aba Classificação
+async function loadStrip() {
+  const data = await api('/api/matches');
+  $('#faixa').innerHTML = data.matches
+    .map((m, i) => {
+      const live = m.status === 'LIVE';
+      const finished = m.status === 'FINISHED';
+      const date = new Date(m.utcDate);
+      const when = date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+      const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const p = m.prediction;
+      return `<a class="jogo ${live ? 'live' : ''}" href="#/jogos" style="animation-delay:${i * 50}ms">
+        <header><span>${live ? `<span class="live-tag">● ${m.minute ?? ''}'</span>` : finished ? 'Encerrado' : when}</span><span>${time}</span></header>
+        <div class="vs">
+          <div>${crestImg(m.home)}${escapeHtml(m.home.tla)}</div>
+          ${live || finished ? `<div class="pl">${m.homeGoals ?? 0}–${m.awayGoals ?? 0}</div>` : '<div class="pl pending">×</div>'}
+          <div>${crestImg(m.away)}${escapeHtml(m.away.tla)}</div>
+        </div>
+        ${p ? `${probBar(p)}<div class="problabels"><span>${pct(p.pHome)}</span><span>${pct(p.pDraw)}</span><span>${pct(p.pAway)}</span></div>` : ''}
+      </a>`;
+    })
+    .join('');
+  growBars($('#faixa'));
+}
+
+// ---------- Jogo em destaque no topo ----------
+
+// Ao vivo primeiro; senão o próximo a começar; senão o último encerrado.
+function pickHighlight(matches) {
+  const live = matches.filter((m) => m.status === 'LIVE');
+  if (live.length) return live[0];
+  const next = matches.filter((m) => m.status === 'SCHEDULED').sort((a, b) => a.utcDate.localeCompare(b.utcDate));
+  if (next.length) return next[0];
+  return [...matches].sort((a, b) => b.utcDate.localeCompare(a.utcDate))[0];
+}
+
+async function loadHero() {
+  const data = await api('/api/matches');
+  const m = pickHighlight(data.matches);
+  if (!m) {
+    $('#destaque').innerHTML = '';
+    return;
+  }
+  const live = m.status === 'LIVE';
+  const finished = m.status === 'FINISHED';
+  const date = new Date(m.utcDate);
+  const when = date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const tag = live
+    ? `<span class="tag-vivo"><i></i>AO VIVO${m.minute ? ` · ${m.minute}'` : ''}</span>`
+    : finished
+      ? '<span class="tag-vivo fim">ENCERRADO</span>'
+      : `<span class="tag-vivo proximo">PRÓXIMO JOGO · ${escapeHtml(when)} · ${time}</span>`;
+  const side = (t) => `<a class="lado" href="#/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`;
+  const p = m.prediction;
+  const html = `${tag}
+    <div class="placar">
+      ${side(m.home)}
+      <div class="gols">${live || finished ? `${m.homeGoals ?? 0}<span>×</span>${m.awayGoals ?? 0}` : '<span>vs</span>'}</div>
+      ${side(m.away)}
+    </div>
+    ${
+      p
+        ? `<div class="chances">${probBar(p)}
+      <div class="problabels"><span><b>${pct(p.pHome)}</b> ${escapeHtml(m.home.tla)}</span><span>Empate <b>${pct(p.pDraw)}</b></span><span>${escapeHtml(m.away.tla)} <b>${pct(p.pAway)}</b></span></div>
+      <div class="palpite">${live ? 'Placar final mais provável' : 'Placar mais provável'}: ${p.likelyScore[0]} × ${p.likelyScore[1]}</div></div>`
+        : ''
+    }`;
+  // Só redesenha se algo mudou, para as barras não recomeçarem a cada atualização.
+  if (state.heroHtml === html) return;
+  state.heroHtml = html;
+  $('#destaque').innerHTML = html;
+  growBars($('#destaque'));
 }
 
 // ---------- Jogos ----------
@@ -128,11 +270,7 @@ function matchCard(m, watchUrl) {
     const [lh, la] = p.likelyScore;
     prediction = `
       <div>
-        <div class="probbar" title="Vitória mandante / empate / vitória visitante">
-          <div class="h" style="width:${p.pHome * 100}%"></div>
-          <div class="d" style="width:${p.pDraw * 100}%"></div>
-          <div class="a" style="width:${p.pAway * 100}%"></div>
-        </div>
+        ${probBar(p)}
         <div class="problabels">
           <span><b>${pct(p.pHome)}</b> ${escapeHtml(m.home.tla)}</span>
           <span>Empate <b>${pct(p.pDraw)}</b></span>
@@ -161,6 +299,7 @@ async function loadMatches() {
   $('#prev-round').disabled = data.matchday <= 1;
   $('#next-round').disabled = data.matchday >= data.totalMatchdays;
   $('#matches').innerHTML = data.matches.map((m) => matchCard(m, data.watchUrl)).join('');
+  growBars($('#matches'));
 }
 
 // ---------- Evolução ----------
@@ -171,8 +310,8 @@ async function loadEvolution() {
   const datasets = data.teams.map((t, i) => ({
     label: t.team.shortName,
     data: t.positions,
-    borderColor: `hsl(${(i * 360) / n}, 70%, 60%)`,
-    backgroundColor: `hsl(${(i * 360) / n}, 70%, 60%)`,
+    borderColor: `hsl(${(i * 360) / n}, 70%, 40%)`,
+    backgroundColor: `hsl(${(i * 360) / n}, 70%, 40%)`,
     hidden: i >= 6,
     tension: 0.25,
     pointRadius: 2,
@@ -288,8 +427,8 @@ function renderAccuracyChart(s) {
           type: 'bar',
           label: 'Acerto na rodada',
           data: values,
-          backgroundColor: '#22c55e',
-          hoverBackgroundColor: '#4ade80',
+          backgroundColor: '#0b7a3e',
+          hoverBackgroundColor: '#3fa86a',
           borderRadius: { topLeft: 4, topRight: 4 },
           borderSkipped: 'bottom',
           categoryPercentage: 0.85,
@@ -300,7 +439,7 @@ function renderAccuracyChart(s) {
           type: 'line',
           label: 'Média geral',
           data: average,
-          borderColor: '#e8f0ec',
+          borderColor: '#14231a',
           borderWidth: 2,
           borderDash: [6, 4],
           pointRadius: 0,
@@ -313,7 +452,7 @@ function renderAccuracyChart(s) {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' }, grid: { color: '#1c2b25' } },
+        y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' }, grid: { color: '#ece6d6' } },
         x: { title: { display: true, text: 'Rodada' }, grid: { display: false } },
       },
       plugins: {
@@ -349,18 +488,18 @@ function renderCalibrationChart(s) {
         {
           label: 'Modelo',
           data: points,
-          borderColor: '#22c55e',
-          backgroundColor: '#22c55e',
+          borderColor: '#0b7a3e',
+          backgroundColor: '#0b7a3e',
           borderWidth: 2,
           pointRadius: 5,
           pointHoverRadius: 7,
-          pointBorderColor: '#15211c',
+          pointBorderColor: '#fff',
           pointBorderWidth: 2,
         },
         {
           label: 'Calibração perfeita',
           data: [{ x: 0, y: 0 }, { x: 100, y: 100 }],
-          borderColor: '#8ea398',
+          borderColor: '#6b6a5c',
           borderWidth: 1.5,
           borderDash: [6, 4],
           pointRadius: 0,
@@ -371,8 +510,8 @@ function renderCalibrationChart(s) {
     options: {
       maintainAspectRatio: false,
       scales: {
-        x: { type: 'linear', min: 0, max: 100, ticks: { callback: (v) => v + '%' }, title: { display: true, text: 'Probabilidade prevista' }, grid: { color: '#1c2b25' } },
-        y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' }, title: { display: true, text: 'Aconteceu de fato' }, grid: { color: '#1c2b25' } },
+        x: { type: 'linear', min: 0, max: 100, ticks: { callback: (v) => v + '%' }, title: { display: true, text: 'Probabilidade prevista' }, grid: { color: '#ece6d6' } },
+        y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' }, title: { display: true, text: 'Aconteceu de fato' }, grid: { color: '#ece6d6' } },
       },
       plugins: {
         legend: { position: 'top', align: 'end', labels: { boxWidth: 12 } },
@@ -443,13 +582,13 @@ function renderDecayCalibration(c) {
         {
           label: 'Nota Brier',
           data: points.map((p) => p.brier),
-          borderColor: '#8ea398',
+          borderColor: '#6b6a5c',
           borderWidth: 2,
           tension: 0.2,
           pointRadius: points.map((_, i) => (i === chosen ? 8 : 4)),
           pointHoverRadius: points.map((_, i) => (i === chosen ? 10 : 6)),
-          pointBackgroundColor: points.map((p, i) => (i === chosen ? '#22c55e' : p.significant ? '#4ade80' : '#8ea398')),
-          pointBorderColor: points.map((_, i) => (i === chosen ? '#e8f0ec' : '#15211c')),
+          pointBackgroundColor: points.map((p, i) => (i === chosen ? '#0b7a3e' : p.significant ? '#3fa86a' : '#6b6a5c')),
+          pointBorderColor: points.map((_, i) => (i === chosen ? '#14231a' : '#fff')),
           pointBorderWidth: 2,
         },
       ],
@@ -458,7 +597,7 @@ function renderDecayCalibration(c) {
       maintainAspectRatio: false,
       scales: {
         x: { title: { display: true, text: 'Meia-vida de um jogo  →  jogos antigos pesam cada vez menos' }, grid: { display: false } },
-        y: { title: { display: true, text: 'Nota Brier (menor é melhor)' }, ticks: { callback: (v) => v.toFixed(3).replace('.', ',') }, grid: { color: '#1c2b25' } },
+        y: { title: { display: true, text: 'Nota Brier (menor é melhor)' }, ticks: { callback: (v) => v.toFixed(3).replace('.', ',') }, grid: { color: '#ece6d6' } },
       },
       plugins: {
         legend: { display: false },
@@ -531,7 +670,7 @@ async function loadHistory() {
 
 // ---------- Página do time ----------
 
-const ZONE_COLORS = { lib: '#22c55e', sul: '#38bdf8', reb: '#ef4444', mid: '#3d5148' };
+const ZONE_COLORS = { lib: '#0b7a3e', sul: '#1d4fd8', reb: '#d7263d', mid: '#cfc8b5' };
 const RESULT_WORDS = {
   V: ['vitória', 'vitórias seguidas'],
   E: ['empate', 'empates seguidos'],
@@ -595,8 +734,8 @@ function renderTeamCharts(d) {
         {
           label: 'Posição',
           data: d.evolution.positions,
-          borderColor: '#22c55e',
-          backgroundColor: '#22c55e',
+          borderColor: '#0b7a3e',
+          backgroundColor: '#0b7a3e',
           borderWidth: 2,
           tension: 0.25,
           pointRadius: 3,
@@ -608,7 +747,7 @@ function renderTeamCharts(d) {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        y: { reverse: true, min: 1, max: total, ticks: { stepSize: 1, callback: (v) => (v === 1 || v % 5 === 0 ? `${v}º` : '') }, grid: { color: '#1c2b25' } },
+        y: { reverse: true, min: 1, max: total, ticks: { stepSize: 1, callback: (v) => (v === 1 || v % 5 === 0 ? `${v}º` : '') }, grid: { color: '#ece6d6' } },
         x: { title: { display: true, text: 'Rodada' }, grid: { display: false } },
       },
       plugins: {
@@ -638,7 +777,7 @@ function renderTeamCharts(d) {
     options: {
       maintainAspectRatio: false,
       scales: {
-        y: { beginAtZero: true, ticks: { callback: (v) => v + '%' }, grid: { color: '#1c2b25' } },
+        y: { beginAtZero: true, ticks: { callback: (v) => v + '%' }, grid: { color: '#ece6d6' } },
         x: { grid: { display: false } },
       },
       plugins: {
@@ -658,14 +797,14 @@ function renderTeamCharts(d) {
         {
           label: 'Gols marcados',
           data: games.map((g) => g.goalsFor),
-          backgroundColor: '#22c55e',
+          backgroundColor: '#0b7a3e',
           borderRadius: 4,
           borderSkipped: false,
         },
         {
           label: 'Gols sofridos',
           data: games.map((g) => -g.goalsAgainst),
-          backgroundColor: '#ef4444',
+          backgroundColor: '#d7263d',
           borderRadius: 4,
           borderSkipped: false,
         },
@@ -676,7 +815,7 @@ function renderTeamCharts(d) {
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { stacked: true, title: { display: true, text: 'Rodada' }, grid: { display: false } },
-        y: { stacked: true, ticks: { stepSize: 1, callback: (v) => Math.abs(v) }, grid: { color: (c) => (c.tick.value === 0 ? '#8ea398' : '#1c2b25') } },
+        y: { stacked: true, ticks: { stepSize: 1, callback: (v) => Math.abs(v) }, grid: { color: (c) => (c.tick.value === 0 ? '#6b6a5c' : '#ece6d6') } },
       },
       plugins: {
         legend: { position: 'top', align: 'end', labels: { boxWidth: 12 } },
@@ -781,8 +920,8 @@ async function loadTeam() {
 
 state.scout = { sort: null, dir: 'desc', teamsLoaded: false, retry: null };
 
-const PLAYER_COLOR = '#22c55e';
-const COMPARE_COLOR = '#3b82f6';
+const PLAYER_COLOR = '#0b7a3e';
+const COMPARE_COLOR = '#1d4fd8';
 
 function formatMetric(m, value = m.value) {
   if (value == null) return '–';
@@ -890,7 +1029,7 @@ function renderRadar(d) {
     backgroundColor: color + '33',
     borderWidth: 2,
     pointBackgroundColor: color,
-    pointBorderColor: '#15211c',
+    pointBorderColor: '#fff',
     pointBorderWidth: 2,
     pointRadius: 4,
     pointHoverRadius: 6,
@@ -909,9 +1048,9 @@ function renderRadar(d) {
           min: 0,
           max: 100,
           ticks: { stepSize: 25, display: false },
-          grid: { color: '#26372f' },
-          angleLines: { color: '#26372f' },
-          pointLabels: { color: '#e8f0ec', font: { size: 12 } },
+          grid: { color: '#e2dccb' },
+          angleLines: { color: '#e2dccb' },
+          pointLabels: { color: '#14231a', font: { size: 12 } },
         },
       },
       plugins: {
@@ -1072,7 +1211,10 @@ const loaders = {
 
 async function refresh() {
   try {
+    const hero = loadHero();
+    if (!state.metaSet && state.tab !== 'tabela') api('/api/overview').then(setMeta, () => {});
     await loaders[state.tab]();
+    await hero;
   } catch (err) {
     showBanner(`Não foi possível carregar os dados: ${err.message}`, true);
   }

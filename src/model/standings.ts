@@ -70,6 +70,21 @@ export function computeStandings(teams: Team[], matches: Match[], upToMatchday =
   return sorted;
 }
 
+/**
+ * Primeira rodada com pelo menos metade dos jogos por disputar. Um jogo adiado
+ * solto numa rodada antiga não deve puxar a "rodada atual" para trás.
+ */
+export function currentMatchday(matches: Match[]): number {
+  const pending = matches.filter((m) => !isFinished(m));
+  if (!pending.length) return Math.max(...matches.map((m) => m.matchday));
+  const total = new Map<number, number>();
+  for (const m of matches) total.set(m.matchday, (total.get(m.matchday) ?? 0) + 1);
+  const open = new Map<number, number>();
+  for (const m of pending) open.set(m.matchday, (open.get(m.matchday) ?? 0) + 1);
+  const rounds = [...open].filter(([md, n]) => n * 2 >= total.get(md)!).map(([md]) => md);
+  return rounds.length ? Math.min(...rounds) : Math.min(...open.keys());
+}
+
 /** Posição de cada time ao fim de cada rodada já jogada. */
 export function computeEvolution(teams: Team[], matches: Match[]) {
   const lastPlayed = Math.max(0, ...matches.filter(isFinished).map((m) => m.matchday));

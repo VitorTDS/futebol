@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "node --watch-path=src --watch-path=.env src/server.ts",
     "start": "node src/server.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "express": "^5.1.0"

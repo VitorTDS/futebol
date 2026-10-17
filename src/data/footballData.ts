@@ -35,14 +35,30 @@ interface ApiScorer {
   penalties: number | null;
 }
 
+// A football-data.org usa siglas e nomes curtos estranhos para alguns clubes
+// (Coritiba e Corinthians são os dois "COR"). Corrige pelo id do time.
+const TEAM_FIXES: Record<number, { shortName?: string; tla?: string }> = {
+  1766: { shortName: 'Atlético-MG' },
+  1767: { tla: 'GRE' },
+  1768: { shortName: 'Athletico-PR' },
+  1776: { tla: 'SAO' },
+  4241: { tla: 'CFC' },
+  4287: { shortName: 'Remo', tla: 'REM' },
+  6684: { tla: 'INT' },
+};
+
+export function fixTeam(t: Team): Team {
+  return { ...t, ...TEAM_FIXES[t.id] };
+}
+
 function toTeam(t: ApiTeam): Team {
-  return {
+  return fixTeam({
     id: t.id,
     name: t.name,
     shortName: t.shortName ?? t.name,
     tla: t.tla ?? t.name.slice(0, 3).toUpperCase(),
     crest: t.crest ?? undefined,
-  };
+  });
 }
 
 function toStatus(status: string): MatchStatus {
@@ -89,7 +105,8 @@ export function createFootballDataProvider(opts: {
   async function pastSeason(season: string): Promise<Match[]> {
     const file = path.join(CACHE_DIR, `football-data-${opts.competition}-${season}.json`);
     try {
-      return JSON.parse(await readFile(file, 'utf8')) as Match[];
+      const cachedMatches = JSON.parse(await readFile(file, 'utf8')) as Match[];
+      return cachedMatches.map((m) => ({ ...m, home: fixTeam(m.home), away: fixTeam(m.away) }));
     } catch {
       // ainda não está em disco
     }

@@ -5,32 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Painel do Brasileirão</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;800&family=Permanent+Marker&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   </head>
   <body>
-    <header>
-      <div class="brand">
-        <span class="logo">⚽</span>
-        <div>
-          <h1>Painel do Brasileirão</h1>
-          <p id="meta" class="muted">Carregando…</p>
-        </div>
+    <header class="hero">
+      <div class="gramado" aria-hidden="true"><div class="campo">
+        <svg viewBox="0 0 1300 760" fill="none" stroke-width="4">
+          <rect x="40" y="40" width="1220" height="680" />
+          <line x1="650" y1="40" x2="650" y2="720" />
+          <circle cx="650" cy="380" r="100" />
+          <rect x="40" y="200" width="180" height="360" /><rect x="1080" y="200" width="180" height="360" />
+          <rect x="40" y="290" width="70" height="180" /><rect x="1190" y="290" width="70" height="180" />
+          <circle class="bola" cx="650" cy="380" r="12" stroke="none" />
+        </svg>
+      </div></div>
+
+      <div class="topo">
+        <a class="brand" href="#/tabela">
+          <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#fff"/><path d="M20 11l7 5-3 8h-8l-3-8z" fill="#111"/><path d="M20 2v9M27 16l9-3M24 24l6 8M16 24l-6 8M13 16l-9-3" stroke="#111" stroke-width="2"/></svg>
+          <div>
+            <h1>Brasileirão <span>Ao Vivo</span></h1>
+            <p id="meta">Carregando…</p>
+          </div>
+        </a>
+        <nav>
+          <button class="tab active" data-tab="tabela">Classificação</button>
+          <button class="tab" data-tab="jogos">Jogos</button>
+          <button class="tab" data-tab="evolucao">Evolução</button>
+          <button class="tab" data-tab="acertos">Acertos</button>
+          <button class="tab" data-tab="artilharia">Artilharia</button>
+          <button class="tab" data-tab="scout">Scout</button>
+        </nav>
       </div>
-      <nav>
-        <button class="tab active" data-tab="tabela">Classificação</button>
-        <button class="tab" data-tab="jogos">Jogos</button>
-        <button class="tab" data-tab="evolucao">Evolução</button>
-        <button class="tab" data-tab="acertos">Acertos</button>
-        <button class="tab" data-tab="artilharia">Artilharia</button>
-        <button class="tab" data-tab="scout">Scout</button>
-      </nav>
+
+      <div id="destaque" class="destaque"></div>
     </header>
 
     <div id="banner" class="banner" hidden></div>
 
     <main>
       <section id="tabela" class="panel active">
+        <h2 class="sec">Jogos da rodada <span class="nota">quem leva?</span></h2>
+        <div id="faixa" class="faixa"></div>
+
+        <h2 class="sec">Classificação <span class="nota">cola aí!</span></h2>
         <div class="table-wrap">
           <table class="standings">
             <thead>
@@ -59,9 +80,17 @@
           <span class="zone-dot reb"></span> Rebaixamento
           <span class="muted" id="sim-note"></span>
         </p>
+
+        <h2 class="sec">Corrida <span class="nota">quem chega?</span></h2>
+        <div class="corridas">
+          <div class="corrida-card"><h3>Título</h3><div id="corrida-title"></div></div>
+          <div class="corrida-card"><h3>Libertadores</h3><div id="corrida-libertadores"></div></div>
+          <div class="corrida-card"><h3>Rebaixamento</h3><div id="corrida-relegation"></div></div>
+        </div>
       </section>
 
       <section id="jogos" class="panel">
+        <h2 class="sec">Jogos <span class="nota">rodada a rodada</span></h2>
         <div class="round-nav">
           <button id="prev-round" aria-label="Rodada anterior">‹</button>
           <h2 id="round-title">Rodada</h2>
@@ -71,11 +100,13 @@
       </section>
 
       <section id="evolucao" class="panel">
+        <h2 class="sec">Evolução <span class="nota">sobe e desce</span></h2>
         <p class="muted">Posição na tabela ao fim de cada rodada. Clique nos times da legenda para mostrar ou esconder.</p>
         <div class="chart-wrap"><canvas id="evolution-chart"></canvas></div>
       </section>
 
       <section id="acertos" class="panel">
+        <h2 class="sec">Acertos do modelo <span class="nota">o modelo é bom?</span></h2>
         <p class="muted">
           Cada jogo encerrado foi previsto de novo usando <b>só os jogos que aconteceram antes dele</b>,
           como se o modelo tivesse rodado na véspera. Aqui está como ele se saiu.
@@ -188,6 +219,7 @@
       </section>
 
       <section id="scout" class="panel">
+        <h2 class="sec">Scout <span class="nota">de olho neles</span></h2>
         <div id="scout-status"></div>
         <div class="filters">
           <input id="scout-q" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador" />
@@ -248,6 +280,7 @@
       </section>
 
       <section id="artilharia" class="panel">
+        <h2 class="sec">Artilharia <span class="nota">bola na rede!</span></h2>
         <div id="scorers"></div>
       </section>
     </main>

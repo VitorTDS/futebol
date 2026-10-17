@@ -11,7 +11,7 @@ import { buildBackground, fitModel, MODEL_KINDS, type Background } from './model
 import { MODEL_LABELS, predictMatch, type FittedModel, type ModelKind } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { simulateSeason, type TeamOutlook } from './model/simulation.ts';
-import { computeEvolution, computeStandings, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
+import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
 import type { Match, PlayerStats, Position, Team } from './types.ts';
@@ -221,7 +221,6 @@ async function getAnalysis(): Promise<Analysis> {
     rng: mulberry32(Date.now()),
   });
   const matchdays = matches.map((m) => m.matchday);
-  const pending = matches.filter((m) => !isFinished(m));
 
   const value: Analysis = {
     matches,
@@ -234,7 +233,7 @@ async function getAnalysis(): Promise<Analysis> {
     historyWithoutBackground: history.withoutBackground,
     calibration: calib,
     background: bg,
-    currentMatchday: pending.length ? Math.min(...pending.map((m) => m.matchday)) : Math.max(...matchdays),
+    currentMatchday: currentMatchday(matches),
     totalMatchdays: Math.max(...matchdays),
     updatedAt: new Date().toISOString(),
   };
