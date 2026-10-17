@@ -1,5 +1,6 @@
 // Monte Carlo: sorteia o placar de todos os jogos que faltam milhares de vezes
 // e conta em que posição cada time terminou em cada uma dessas temporadas simuladas.
+import { continentalSpots, type CupOutcomes, type SpotRules } from './cups.ts';
 import { MAX_GOALS, remainingGoals, scoreMatrix, type FittedModel } from './prediction.ts';
 import type { Rng } from './random.ts';
 import { isFinished } from './standings.ts';
@@ -18,13 +19,30 @@ export interface TeamOutlook {
 
 export interface SimulationOptions {
   runs: number;
-  zones: { libertadores: number; sulamericana: number; relegation: number };
+  /** Vagas pela tabela (Libertadores e Sul-Americana) e quantos caem */
+  zones: SpotRules & { relegation: number };
   rng: Rng;
+  /** Sorteia as copas que dão vaga extra; sem isso, vale só a tabela */
+  cups?: (rng: Rng) => CupOutcomes;
+}
+
+/** Até que posição vão as vagas, conforme as copas terminarem. */
+export interface ZoneOutlook {
+  /** libertadoresCutoff[i] = chance de a vaga pela tabela ir até o (i + 1)º */
+  libertadoresCutoff: number[];
+  sulamericanaCutoff: number[];
+  /** Corte mais provável de cada zona (para colorir a tabela) */
+  likely: { libertadores: number; sulamericana: number; relegation: number };
+}
+
+export interface SeasonOutlook {
+  teams: TeamOutlook[];
+  zones: ZoneOutlook;
 }
 
 const SIDE = MAX_GOALS + 1;
 
-export function simulateSeason(teams: Team[], matches: Match[], model: FittedModel, opts: SimulationOptions): TeamOutlook[] {
+export function simulateSeason(teams: Team[], matches: Match[], model: FittedModel, opts: SimulationOptions): SeasonOutlook {
   const T = teams.length;
   const index = new Map(teams.map((t, i) => [t.id, i]));
 
@@ -63,6 +81,11 @@ export function simulateSeason(teams: Team[], matches: Match[], model: FittedMod
   const order = teams.map((_, i) => i);
   const positionCounts = teams.map(() => new Float64Array(T));
   const pointsSum = new Float64Array(T);
+  const libCount = new Float64Array(T);
+  const sulCount = new Float64Array(T);
+  const libCutoff = new Float64Array(T + 1);
+  const sulCutoff = new Float64Array(T + 1);
+  const ids = teams.map((t) => t.id);
 
   for (let run = 0; run < opts.runs; run++) {
     pts.set(basePts);
@@ -83,22 +106,45 @@ export function simulateSeason(teams: Team[], matches: Match[], model: FittedMod
 
     for (let pos = 0; pos < T; pos++) positionCounts[order[pos]][pos]++;
     for (let i = 0; i < T; i++) pointsSum[i] += pts[i];
+
+    const spots = continentalSpots(
+      order.map((i) => ids[i]),
+      opts.zones,
+      opts.cups?.(opts.rng),
+    );
+    for (let i = 0; i < T; i++) {
+      if (spots.libertadores.has(ids[i])) libCount[i]++;
+      if (spots.sulamericana.has(ids[i])) sulCount[i]++;
+    }
+    libCutoff[spots.libertadoresCutoff]++;
+    sulCutoff[spots.sulamericanaCutoff]++;
   }
 
-  const { libertadores, sulamericana, relegation } = opts.zones;
-  return teams.map((team, i) => {
+  const { relegation } = opts.zones;
+  const outlook = teams.map((team, i) => {
     const probs = Array.from(positionCounts[i], (c) => c / opts.runs);
     const sum = (from: number, to: number) => probs.slice(from, to).reduce((acc, p) => acc + p, 0);
     return {
       teamId: team.id,
       positionProbs: probs,
       title: probs[0],
-      libertadores: sum(0, libertadores),
-      sulamericana: sum(libertadores, sulamericana),
+      libertadores: libCount[i] / opts.runs,
+      sulamericana: sulCount[i] / opts.runs,
       relegation: sum(T - relegation, T),
       expectedPoints: pointsSum[i] / opts.runs,
     };
   });
+
+  const toProbs = (counts: Float64Array) => Array.from(counts.subarray(1), (c) => c / opts.runs);
+  const mode = (counts: Float64Array) => counts.indexOf(Math.max(...counts));
+  return {
+    teams: outlook,
+    zones: {
+      libertadoresCutoff: toProbs(libCutoff),
+      sulamericanaCutoff: toProbs(sulCutoff),
+      likely: { libertadores: mode(libCutoff), sulamericana: mode(sulCutoff), relegation },
+    },
+  };
 }
 
 function record(pts: Int32Array, wins: Int32Array, gd: Int32Array, gf: Int32Array, h: number, a: number, hg: number, ag: number) {

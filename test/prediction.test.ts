@@ -46,9 +46,9 @@ test('simulação: probabilidades de cada time somam 1 e cada posição tem um t
   for (const h of teams) for (const a of teams) if (h !== a) matches.push(match(1, h, a));
   const out = simulateSeason(teams, matches, model, {
     runs: 2000,
-    zones: { libertadores: 1, sulamericana: 2, relegation: 1 },
+    zones: { libertadores: 1, sulamericana: 1, relegation: 1 },
     rng: mulberry32(42),
-  });
+  }).teams;
   for (const o of out) close(o.positionProbs.reduce((s, p) => s + p, 0), 1, 1e-9);
   for (let pos = 0; pos < teams.length; pos++) close(out.reduce((s, o) => s + o.positionProbs[pos], 0), 1, 1e-9);
   assert.ok(out[0].title > 0.5, 'o time mais forte deve ser o favorito');
@@ -62,6 +62,6 @@ test('simulação respeita os jogos já encerrados', () => {
     runs: 100,
     zones: { libertadores: 1, sulamericana: 1, relegation: 1 },
     rng: mulberry32(1),
-  });
+  }).teams;
   assert.equal(out.find((o) => o.teamId === b.id)!.title, 1);
 });

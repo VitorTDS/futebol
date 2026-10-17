@@ -31,6 +31,8 @@ export const config = {
   apiFootballSeason: process.env.APIFOOTBALL_SEASON || String(new Date().getFullYear()),
   /** Jogadores com menos minutos que isso ficam fora da comparação (percentis) */
   scoutMinMinutes: Number(process.env.SCOUT_MIN_MINUTES || 450),
-  // Quantidade de vagas em cada zona da tabela
-  zones: { libertadores: 6, sulamericana: 12, relegation: 4 },
+  // Vagas pela tabela (regra de 2026): 5 para a Libertadores, 6 para a Sul-Americana
+  // (os 6 melhores sem vaga na Libertadores) e 4 rebaixados. As vagas extras das
+  // copas ficam em src/data/copas.ts.
+  zones: { libertadores: 5, sulamericana: 6, relegation: 4 },
 };

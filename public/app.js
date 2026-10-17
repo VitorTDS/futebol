@@ -125,9 +125,9 @@ async function loadOverview() {
         <td class="left">${teamHtml(row.team)}</td>
         <td class="points" data-n="${row.points}">${row.points}</td>
         <td>${row.played}</td>
-        <td>${row.won}</td>
-        <td>${row.drawn}</td>
-        <td>${row.lost}</td>
+        <td class="hide-sm">${row.won}</td>
+        <td class="hide-sm">${row.drawn}</td>
+        <td class="hide-sm">${row.lost}</td>
         <td>${row.goalDiff > 0 ? '+' : ''}${row.goalDiff}</td>
         <td class="hide-sm"><span class="form">${row.form.map((r) => `<span class="${r}">${r}</span>`).join('')}</span></td>
         <td class="prob num">${o.expectedPoints.toFixed(1).replace('.', ',')}</td>
@@ -145,8 +145,26 @@ async function loadOverview() {
   }
 
   renderRace(standings);
+  renderZoneNote(data.zoneOutlook);
   growBars($('#tabela'));
   await loadStrip();
+}
+
+// Explica até onde vão as vagas, que dependem das copas ainda em disputa.
+function renderZoneNote(z) {
+  const el = $('#zone-note');
+  el.hidden = !z?.withCups;
+  if (el.hidden) return;
+  const dist = (probs) =>
+    probs
+      .map((p, i) => ({ pos: i + 1, p }))
+      .filter((x) => x.p >= 0.01)
+      .map((x) => `<span class="chip">até o ${x.pos}º <b>${pct(x.p)}</b></span>`)
+      .join('');
+  el.innerHTML = `<b>Vagas mudam com as copas.</b> O Brasileirão dá 5 vagas na Libertadores, mas o campeão e o vice da Copa do Brasil
+    e os campeões brasileiros da Libertadores e da Sul-Americana também se classificam. Quando quem ganha já está no G5, a vaga desce na tabela.
+    <span class="dist"><span class="muted">Libertadores pela tabela:</span> ${dist(z.libertadoresCutoff)}</span>
+    <span class="dist"><span class="muted">Sul-Americana:</span> ${dist(z.sulamericanaCutoff)}</span>`;
 }
 
 const RACES = { title: 'var(--titulo)', libertadores: 'var(--lib)', relegation: 'var(--reb)' };
@@ -156,7 +174,7 @@ function renderRace(standings) {
     const top = standings
       .filter((r) => r.outlook[key] > 0)
       .sort((a, b) => b.outlook[key] - a.outlook[key])
-      .slice(0, 6);
+      .slice(0, key === 'libertadores' ? 10 : 6);
     $(`#corrida-${key}`).innerHTML = top.length
       ? top
           .map(

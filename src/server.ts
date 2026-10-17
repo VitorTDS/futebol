@@ -10,7 +10,9 @@ import { calibrateTimeDecay, halfLife, MIN_MATCHES, type Calibration } from './m
 import { buildBackground, fitModel, MODEL_KINDS, type Background } from './model/models.ts';
 import { MODEL_LABELS, predictMatch, type FittedModel, type ModelKind } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
-import { simulateSeason, type TeamOutlook } from './model/simulation.ts';
+import { createCupSimulator } from './model/cups.ts';
+import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
+import { CUPS_2026 } from './data/copas.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
@@ -39,6 +41,9 @@ interface Analysis {
   model: FittedModel;
   ratings: Map<number, Ratings>;
   outlook: Map<number, TeamOutlook>;
+  zones: ZoneOutlook;
+  /** Se as vagas extras das copas entraram na conta */
+  withCups: boolean;
   /** Histórico de acertos de cada modelo (para comparar) */
   history: Record<ModelKind, BacktestResult>;
   calibration: CalibrationState;
@@ -215,10 +220,14 @@ async function getAnalysis(): Promise<Analysis> {
   const calib = currentCalibration(teams, matches, bg.background);
   const model = fitModel(config.model, teams, matches, new Date().toISOString(), calib.decay, bg.background);
   const history = getHistory(teams, matches, calib, bg.background);
+  // As copas de 2026 só valem para o Brasileirão real de 2026
+  const season = Math.min(...matches.map((m) => new Date(m.utcDate).getUTCFullYear()));
+  const withCups = provider.name === 'football-data.org' && config.competition === 'BSA' && season === 2026;
   const outlook = simulateSeason(teams, matches, model, {
     runs: config.simulations,
     zones: config.zones,
     rng: mulberry32(Date.now()),
+    cups: withCups ? createCupSimulator(model, teams.map((t) => t.id), CUPS_2026) : undefined,
   });
   const matchdays = matches.map((m) => m.matchday);
 
@@ -228,7 +237,9 @@ async function getAnalysis(): Promise<Analysis> {
     standings: computeStandings(teams, matches),
     model,
     ratings: ratings(model, teams),
-    outlook: new Map(outlook.map((o) => [o.teamId, o])),
+    outlook: new Map(outlook.teams.map((o) => [o.teamId, o])),
+    zones: outlook.zones,
+    withCups,
     history: history.byModel,
     historyWithoutBackground: history.withoutBackground,
     calibration: calib,
@@ -257,7 +268,8 @@ app.get(
       background: backgroundInfo(a),
       updatedAt: a.updatedAt,
       simulations: config.simulations,
-      zones: config.zones,
+      zones: a.zones.likely,
+      zoneOutlook: { ...a.zones, withCups: a.withCups },
       currentMatchday: a.currentMatchday,
       totalMatchdays: a.totalMatchdays,
       standings: a.standings.map((row) => ({ ...row, outlook: a.outlook.get(row.team.id) })),
@@ -323,7 +335,7 @@ app.get(
       team: standing.team,
       standing,
       totalTeams: a.teams.length,
-      zones: config.zones,
+      zones: a.zones.likely,
       outlook: a.outlook.get(id),
       model: modelLabel(a.calibration),
       ratings: {
