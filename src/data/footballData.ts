@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { cached } from './cache.ts';
+import { cachedFresh } from './cache.ts';
 import { isMatchTime } from '../model/liveEvents.ts';
 import { keepFinished, staleMatchdays } from './repair.ts';
 import type { DataProvider, Match, MatchStatus, Scorer, Team } from '../types.ts';
@@ -185,17 +185,23 @@ export function createFootballDataProvider(opts: {
     return matches;
   }
 
-  const getMatches = () =>
-    cached(`matches-${opts.competition}`, matchTime ? LIVE_TTL_MS : TTL_MS, async () => {
-      const matches = await currentMatches();
-      matchTime = isMatchTime(matches);
-      return matches;
-    });
+  const getMatches = (force = false) =>
+    cachedFresh(
+      `matches-${opts.competition}`,
+      matchTime ? LIVE_TTL_MS : TTL_MS,
+      async () => {
+        const matches = await currentMatches();
+        matchTime = isMatchTime(matches);
+        return matches;
+      },
+      force,
+    );
 
   return {
     name: 'football-data.org',
 
-    getMatches,
+    getMatches: () => getMatches(),
+    refreshMatches: () => getMatches(true),
 
     async getPreviousSeasons(count) {
       // O Brasileirão cabe num ano só: a temporada é o ano dos jogos
@@ -206,8 +212,9 @@ export function createFootballDataProvider(opts: {
       return result;
     },
 
+    // Artilharia só muda com gol: atualiza a cada 5 minutos, em segundo plano
     getScorers: () =>
-      cached(`scorers-${opts.competition}`, TTL_MS, async () => {
+      cachedFresh(`scorers-${opts.competition}`, 5 * 60_000, async () => {
         const data = await get<{ scorers: ApiScorer[] }>(
           `/competitions/${opts.competition}/scorers?limit=30`,
         );

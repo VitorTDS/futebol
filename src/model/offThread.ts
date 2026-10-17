@@ -1,7 +1,7 @@
 // Fila de trabalhos para a thread de backtests (backtestWorker.ts). Uma thread só,
 // criada na primeira vez que é usada; se ela cair, a próxima chamada cria outra.
 import { Worker } from 'node:worker_threads';
-import type { BacktestJob, HistoryJobResult } from './backtestWorker.ts';
+import type { BacktestJob, ChancesJobResult, HistoryJobResult } from './backtestWorker.ts';
 import type { Calibration } from './calibration.ts';
 
 let worker: Worker | null = null;
@@ -43,3 +43,6 @@ export const historyOffThread = (job: Omit<Extract<BacktestJob, { type: 'history
 
 export const calibrateOffThread = (job: Omit<Extract<BacktestJob, { type: 'calibrate' }>, 'type'>) =>
   run<Calibration>({ type: 'calibrate', ...job });
+
+export const chancesOffThread = (job: Omit<Extract<BacktestJob, { type: 'chances' }>, 'type'>) =>
+  run<ChancesJobResult>({ type: 'chances', ...job });

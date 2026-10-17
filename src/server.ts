@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.ts';
 import { createFootballDataProvider } from './data/footballData.ts';
@@ -8,19 +9,21 @@ import { createApiFootballPlayerProvider } from './data/players/apiFootball.ts';
 import { createMockPlayerProvider } from './data/players/mock.ts';
 import type { BacktestResult } from './model/backtest.ts';
 import { halfLife, MIN_MATCHES, type Calibration } from './model/calibration.ts';
-import { calibrateOffThread, historyOffThread } from './model/offThread.ts';
+import { calibrateOffThread, chancesOffThread, historyOffThread } from './model/offThread.ts';
 import { buildBackground, fitModel, MODEL_KINDS, type Background } from './model/models.ts';
 import { MODEL_LABELS, predictMatch, topScores, type FittedModel, type ModelKind } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { createCupSimulator } from './model/cups.ts';
-import { isMatchTime, liveEvents } from './model/liveEvents.ts';
+import { isMatchTime, liveEvents, type LiveEvent } from './model/liveEvents.ts';
 import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026, type ContinentalCups, type Cup } from './data/copas.ts';
 import { getMatchCenter, getTeamColors } from './data/espn.ts';
 import { createCopaDoBrasilCup } from './copaDoBrasil.ts';
 import { libertadoresCup } from './libertadores.ts';
-import { push, pushEvents } from './push.ts';
+import { compareFinished, compareUpcoming, loadFinishedOdds, marketProgress } from './market.ts';
+import { push, pushEvents, pushMessage } from './push.ts';
+import { createSerieB } from './serieB.ts';
 import { createSulamericanaCup } from './sulamericana.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
@@ -238,6 +241,7 @@ function cupsApply(matches: Match[]): boolean {
 const cupYear = Number(config.season) || new Date().getUTCFullYear();
 const leagueTeams = async () => teamsFrom(await provider.getMatches());
 const copaDoBrasilCup = createCopaDoBrasilCup({ year: cupYear, leagueMatches: () => provider.getMatches(), leagueTeams });
+const serieB = createSerieB({ year: cupYear });
 const sulamericanaCup = createSulamericanaCup({
   year: cupYear,
   extraMatches: async () => [...(await provider.getMatches()), ...(await libertadoresCup.matches().catch(() => [] as Match[]))],
@@ -542,6 +546,89 @@ app.get(
   }),
 );
 
+// Chances rodada a rodada: o passado não muda, então só refaz quando sai resultado
+let lastChances: { key: string; value: Promise<{ rounds: number[]; teams: { teamId: number; title: number[]; libertadores: number[]; relegation: number[] }[] }> } | null = null;
+const CHANCES_RUNS = 3000;
+
+function chancesByRound(a: Analysis) {
+  const key = `${finishedKey(a.matches)}@${a.calibration.decay}|${backgroundKey(a.background.background)}`;
+  if (lastChances?.key !== key) {
+    const entry = {
+      key,
+      value: chancesOffThread({
+        model: config.model,
+        teams: a.teams,
+        matches: a.matches,
+        decay: a.calibration.decay,
+        background: a.background.background,
+        zones: config.zones,
+        // Sem as copas: a situação delas mudou ao longo do ano, e usar a de hoje no
+        // passado dá números enganosos. No histórico, a Libertadores é só pela tabela (G5)
+        cups: null,
+        runs: CHANCES_RUNS,
+      }),
+    };
+    entry.value.catch(() => lastChances === entry && (lastChances = null));
+    lastChances = entry;
+  }
+  return lastChances.value;
+}
+
+app.get(
+  '/api/chances',
+  route(async (_req, res) => {
+    const a = await getAnalysis();
+    const c = await chancesByRound(a);
+    const byId = new Map(c.teams.map((t) => [t.teamId, t]));
+    res.json({
+      runs: CHANCES_RUNS,
+      rounds: c.rounds,
+      // Na ordem da tabela de hoje
+      teams: a.standings.map((row) => ({ team: row.team, ...byId.get(row.team.id) })),
+    });
+  }),
+);
+
+// Modelo × casas de apostas
+app.get(
+  '/api/mercado',
+  route(async (_req, res) => {
+    const a = await getAnalysis();
+    // Cotações dos jogos encerrados: a primeira vez busca em segundo plano (e a página mostra o andamento)
+    loadFinishedOdds(a.matches);
+    const h = await getHistory(a.teams, a.matches, a.calibration, a.background.background);
+    const soon = Date.now() + 8 * 86_400_000;
+    const upcoming = a.matches
+      .filter((m) => !isFinished(m) && m.status !== 'LIVE' && Date.parse(m.utcDate) > Date.now() && Date.parse(m.utcDate) < soon)
+      .slice(0, 20)
+      .map((m) => ({ match: m, model: predictMatch(a.model, m) }));
+    res.json({
+      progress: marketProgress(),
+      season: compareFinished(h.byModel[config.model].entries),
+      upcoming: await compareUpcoming(upcoming),
+    });
+  }),
+);
+
+// Agenda: jogos de todos os campeonatos nos próximos dias (e os de hoje que já rolaram)
+app.get(
+  '/api/agenda',
+  route(async (req, res) => {
+    const days = Math.min(30, Math.max(1, Number(req.query.dias) || 7));
+    // Desde o começo do dia no Brasil (UTC-3), para mostrar os jogos de hoje que já acabaram
+    const now = Date.now();
+    const from = now - ((now - 3 * 3_600_000) % 86_400_000);
+    const to = from + days * 86_400_000;
+    const a = await getAnalysis();
+    const league = a.matches
+      .filter((m) => Date.parse(m.utcDate) >= from && Date.parse(m.utcDate) <= to)
+      .map((m) => ({ ...m, comp: 'bsa', stageLabel: `Rodada ${m.matchday}`, prediction: isFinished(m) ? null : predictMatch(a.model, m) }));
+    const cups = await Promise.allSettled([libertadoresCup, copaDoBrasilCup, sulamericanaCup, serieB].map((c) => c.agenda(from, to)));
+    const matches = [...league, ...cups.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))].sort((x, y) => x.utcDate.localeCompare(y.utcDate));
+    res.json({ days, from: new Date(from).toISOString(), watchUrl: config.watchUrl, matches });
+  }),
+);
+
 app.get(
   '/api/teams/:id',
   route(async (req, res) => {
@@ -795,6 +882,7 @@ app.get(
 app.use('/api/lib', libertadoresCup.router);
 app.use('/api/cdb', copaDoBrasilCup.router);
 app.use('/api/sula', sulamericanaCup.router);
+app.use('/api/serieb', serieB.router);
 app.use('/api/push', push);
 
 // Situação de cada fonte, para a página avisar quando está mostrando placares antigos
@@ -804,8 +892,47 @@ app.get('/api/status', (_req, res) => {
     lib: libertadoresCup.health(),
     cdb: copaDoBrasilCup.health(),
     sula: sulamericanaCup.health(),
+    serieb: serieB.health(),
   });
 });
+
+// Escudos pelo próprio servidor: a imagem de compartilhar é desenhada na página, e o
+// navegador só deixa salvar o desenho se as imagens vierem do mesmo endereço (o
+// servidor de escudos da football-data não libera). Só desses dois sites, e guardados em disco.
+const CREST_HOSTS = new Set(['crests.football-data.org', 'a.espncdn.com']);
+const CREST_DIR = path.join(import.meta.dirname, '..', 'data', 'cache', 'escudos');
+app.get(
+  '/api/escudo',
+  route(async (req, res) => {
+    let url: URL;
+    try {
+      url = new URL(String(req.query.u ?? ''));
+    } catch {
+      res.status(400).end();
+      return;
+    }
+    if (url.protocol !== 'https:' || !CREST_HOSTS.has(url.hostname)) {
+      res.status(400).end();
+      return;
+    }
+    const file = path.join(CREST_DIR, `${url.hostname}${url.pathname}`.replace(/[^a-z0-9.]/gi, '_'));
+    let body: Buffer;
+    try {
+      body = await readFile(file);
+    } catch {
+      const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (!r.ok) {
+        res.status(r.status).end();
+        return;
+      }
+      body = Buffer.from(await r.arrayBuffer());
+      await mkdir(CREST_DIR, { recursive: true });
+      await writeFile(file, body);
+    }
+    res.set({ 'Content-Type': url.pathname.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': 'public, max-age=604800' });
+    res.send(body);
+  }),
+);
 
 // Para a hospedagem saber que o servidor está de pé (e para um "despertador" externo)
 app.get('/api/health', (_req, res) => {
@@ -844,14 +971,100 @@ interface LiveSource {
 }
 
 const LIVE_SOURCES: LiveSource[] = [
-  { comp: 'bsa', name: 'Brasileirão', getMatches: () => provider.getMatches(), liveDelay: 15_000, jogoUrl: (id) => `/#/jogo/${id}` },
+  { comp: 'bsa', name: 'Brasileirão', getMatches: () => provider.refreshMatches(), liveDelay: 15_000, jogoUrl: (id) => `/#/jogo/${id}` },
   { comp: 'lib', name: 'Libertadores', getMatches: libertadoresCup.liveMatches, liveDelay: 20_000, jogoUrl: (id) => `/#/lib/jogo/${id}` },
   { comp: 'cdb', name: 'Copa do Brasil', getMatches: copaDoBrasilCup.liveMatches, liveDelay: 30_000, jogoUrl: (id) => `/#/cdb/jogo/${id}` },
   { comp: 'sula', name: 'Sul-Americana', getMatches: sulamericanaCup.liveMatches, liveDelay: 30_000, jogoUrl: (id) => `/#/sula/jogo/${id}` },
+  { comp: 'serieb', name: 'Série B', getMatches: serieB.liveMatches, liveDelay: 30_000, jogoUrl: (id) => `/#/serieb/jogo/${id}` },
 ];
 
 const sameScore = (a: Match, b: Match) =>
   a.status === b.status && a.homeGoals === b.homeGoals && a.awayGoals === b.awayGoals && a.minute === b.minute;
+
+// ---------- Avisos além do gol: lembrete, resumo do jogo e mudanças grandes ----------
+
+const reminded = new Set<string>();
+const REMINDER_MS = 35 * 60_000;
+
+/** Lembrete uns 30 minutos antes de cada jogo (para quem segue um dos times e pediu) */
+function remind(source: LiveSource, matches: Match[]) {
+  const now = Date.now();
+  for (const m of matches) {
+    const left = Date.parse(m.utcDate) - now;
+    const key = `${source.comp}:${m.id}`;
+    if (m.status !== 'SCHEDULED' || m.home.tbd || m.away.tbd || left <= 0 || left > REMINDER_MS || reminded.has(key)) continue;
+    reminded.add(key);
+    const hora = new Date(m.utcDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+    pushMessage([m.home.id, m.away.id], 'reminder', {
+      title: `Daqui a pouco: ${m.home.shortName} x ${m.away.shortName}`,
+      body: `${source.name} · começa às ${hora}`,
+      icon: m.home.crest,
+      tag: `lembrete-${key}`,
+      url: source.jogoUrl(m.id),
+    }).catch((err) => console.warn('Push:', (err as Error).message));
+  }
+}
+
+const CHANCE_KINDS = [
+  ['title', 'título'],
+  ['libertadores', 'Libertadores'],
+  ['relegation', 'rebaixamento'],
+] as const;
+const fmtPct = (p: number) => (p < 0.005 ? '0%' : p > 0.995 ? '100%' : `${Math.round(p * 100)}%`);
+
+/** A chance que mais mudou entre duas simulações (título, Libertadores ou rebaixamento) */
+function biggestChange(before: TeamOutlook | undefined, after: TeamOutlook | undefined) {
+  if (!before || !after) return null;
+  return CHANCE_KINDS.map(([key, label]) => ({ label, before: before[key], after: after[key] })).reduce((a, b) =>
+    Math.abs(b.after - b.before) > Math.abs(a.after - a.before) ? b : a,
+  );
+}
+
+// Chances logo depois do último resultado (para comparar com as de depois do próximo)
+let outlookAtLastResult: Map<number, TeamOutlook> | null = null;
+
+/** Fim de jogo no Brasileirão: resumo com as chances novas e aviso de mudança grande para os outros times */
+async function resultNotices(events: LiveEvent[]) {
+  const ended = events.filter((e) => e.type === 'fulltime');
+  if (!ended.length) return;
+  const a = await getAnalysis();
+  const before = outlookAtLastResult ?? a.outlook;
+  outlookAtLastResult = a.outlook;
+  const inMatch = new Set<number>();
+  const score = (e: (typeof ended)[number]) => `${e.home.shortName} ${e.homeGoals}×${e.awayGoals} ${e.away.shortName}`;
+  for (const ev of ended) {
+    if (ev.type !== 'fulltime') continue;
+    inMatch.add(ev.home.id).add(ev.away.id);
+    const line = (t: Team) => {
+      const c = biggestChange(before.get(t.id), a.outlook.get(t.id));
+      if (!c) return null;
+      const pp = Math.round((c.after - c.before) * 100);
+      return `${t.shortName}: ${fmtPct(c.after)} de ${c.label}${pp ? ` (${pp > 0 ? '+' : ''}${pp})` : ''}`;
+    };
+    await pushMessage([ev.home.id, ev.away.id], 'summary', {
+      title: `Fim de jogo: ${score(ev)}`,
+      body: [line(ev.home), line(ev.away)].filter(Boolean).join(' · '),
+      icon: ev.home.crest,
+      tag: `jogo-${ev.matchId}`,
+      url: `/#/jogo/${ev.matchId}`,
+    });
+  }
+  // Times que não jogaram, mas cuja chance mudou muito com esses resultados
+  const results = ended.map((e) => (e.type === 'fulltime' ? score(e) : '')).join(', ');
+  for (const [id, after] of a.outlook) {
+    if (inMatch.has(id)) continue;
+    const c = biggestChange(before.get(id), after);
+    if (!c || Math.abs(c.after - c.before) < 0.15) continue;
+    const team = a.teams.find((t) => t.id === id)!;
+    await pushMessage([id], 'change', {
+      title: `${team.shortName}: chance de ${c.label} ${c.after > c.before ? 'subiu' : 'caiu'} para ${fmtPct(c.after)}`,
+      body: `Era ${fmtPct(c.before)} antes de ${results}`,
+      icon: team.crest,
+      tag: `chance-${id}`,
+      url: `/#/time/${id}`,
+    });
+  }
+}
 
 /**
  * Lê os placares de um campeonato de tempos em tempos: avisa as páginas abertas
@@ -866,8 +1079,15 @@ function watchLive(source: LiveSource) {
       if (last) {
         const events = liveEvents([...last.values()], matches);
         if (matches.some((m) => !last!.has(m.id) || !sameScore(last!.get(m.id)!, m))) broadcast('update', { comp: source.comp, events });
-        pushEvents(events, source.jogoUrl).catch((err) => console.warn('Push:', (err as Error).message));
+        // No Brasileirão, quem pediu o resumo recebe ele no lugar do "Fim de jogo"
+        const league = source.comp === 'bsa';
+        pushEvents(events, source.jogoUrl, { withSummary: league }).catch((err) => console.warn('Push:', (err as Error).message));
+        if (league) resultNotices(events).catch((err) => console.warn('Push (resumo):', (err as Error).message));
+      } else if (source.comp === 'bsa') {
+        // Primeira leitura: guarda as chances de agora, para comparar com as do próximo resultado
+        getAnalysis().then((a) => (outlookAtLastResult ??= a.outlook), () => {});
       }
+      remind(source, matches);
       last = new Map(matches.map((m) => [m.id, m]));
       if (isMatchTime(matches)) delay = source.liveDelay;
     } catch (err) {

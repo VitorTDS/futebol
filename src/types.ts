@@ -79,6 +79,8 @@ export interface PlayerProvider {
 export interface DataProvider {
   name: string;
   getMatches(): Promise<Match[]>;
+  /** Busca agora, sem usar o que está guardado (o "ao vivo" usa para não atrasar os gols) */
+  refreshMatches?(): Promise<Match[]>;
   /** null quando a fonte não tem artilharia */
   getScorers(): Promise<Scorer[] | null>;
   /** Jogos das `count` temporadas anteriores à atual (a mais recente primeiro) */

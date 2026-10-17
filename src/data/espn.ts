@@ -9,7 +9,7 @@ import type { Match } from '../types.ts';
 const BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 
 /** Campeonato na ESPN: Brasileirão, Libertadores, Copa do Brasil ou Sul-Americana */
-export type EspnLeague = 'bra.1' | 'conmebol.libertadores' | 'bra.copa_do_brazil' | 'conmebol.sudamericana';
+export type EspnLeague = 'bra.1' | 'bra.2' | 'conmebol.libertadores' | 'bra.copa_do_brazil' | 'conmebol.sudamericana';
 const CACHE_DIR = path.join(import.meta.dirname, '..', '..', 'data', 'cache', 'espn');
 
 /** id do time na football-data.org → id na ESPN */

@@ -2,7 +2,7 @@
 // copas no plano grátis. Clubes da Série A ficam com o mesmo id da football-data
 // (via ESPN_TEAMS), para as vagas e os alertas baterem com o Brasileirão; os
 // outros ganham um id próprio.
-import { cached } from './cache.ts';
+import { cached, cachedFresh } from './cache.ts';
 import { ESPN_TEAMS, type EspnLeague } from './espn.ts';
 import { isMatchTime } from '../model/liveEvents.ts';
 import type { DataProvider, Match, MatchStatus, Scorer, Team } from '../types.ts';
@@ -149,13 +149,16 @@ export function createEspnCupProvider(opts: {
   let ttl = 5 * 60_000;
   const known = async () => new Map((await opts.leagueTeams().catch(() => [] as Team[])).map((t) => [t.id, t]));
 
-  const events = (year: number, ttlMs: number): Promise<Json[]> =>
-    cached(`espn-cup-${opts.league}-${year}`, ttlMs, () =>
-      getJson(`${BASE_URL}/site/v2/sports/soccer/${opts.league}/scoreboard?dates=${year}&limit=1000`),
+  const events = (year: number, ttlMs: number, force = false): Promise<Json[]> =>
+    cachedFresh(
+      `espn-cup-${opts.league}-${year}`,
+      ttlMs,
+      () => getJson(`${BASE_URL}/site/v2/sports/soccer/${opts.league}/scoreboard?dates=${year}&limit=1000`),
+      force,
     ).then((data) => data.events ?? []);
 
-  async function season(year: number, ttlMs: number, k: Map<number, Team>): Promise<Match[]> {
-    const evs = await events(year, ttlMs);
+  async function season(year: number, ttlMs: number, k: Map<number, Team>, force = false): Promise<Match[]> {
+    const evs = await events(year, ttlMs, force);
     const groupOf = opts.hasGroups ? await groups(opts.league, year).catch(() => new Map<number, string>()) : new Map<number, string>();
     return evs.map((ev: Json) => toMatch(ev, k, stageBySlug, groupOf));
   }
@@ -168,6 +171,11 @@ export function createEspnCupProvider(opts: {
       ttl = isMatchTime(matches) ? 30_000 : 5 * 60_000;
       return matches;
     },
+    async refreshMatches() {
+      const matches = await season(opts.year, ttl, await known(), true);
+      ttl = isMatchTime(matches) ? 30_000 : 5 * 60_000;
+      return matches;
+    },
     async getScorers() {
       return scorersFrom(await events(opts.year, ttl), await known());
     },
@@ -175,6 +183,59 @@ export function createEspnCupProvider(opts: {
       const k = await known();
       const out = [];
       for (let i = 1; i <= count; i++) out.push({ season: String(opts.year - i), matches: await season(opts.year - i, 86_400_000, k) });
+      return out;
+    },
+  };
+}
+
+/**
+ * Liga por pontos corridos pela ESPN (Série B). A ESPN não diz a rodada de cada
+ * jogo: ela sai da ordem dos jogos de cada time (o 5º jogo de um time é da 5ª
+ * rodada). Jogo adiado fica na rodada em que de fato aconteceu.
+ */
+export function createEspnLeagueProvider(opts: { league: EspnLeague; year: number }): DataProvider {
+  let ttl = 5 * 60_000;
+  const none = new Map<number, Team>();
+  const noStages = new Map<string, string>();
+  const noGroups = new Map<number, string>();
+
+  async function season(year: number, ttlMs: number, force = false): Promise<Match[]> {
+    const data = await cachedFresh(
+      `espn-liga-${opts.league}-${year}`,
+      ttlMs,
+      () => getJson(`${BASE_URL}/site/v2/sports/soccer/${opts.league}/scoreboard?dates=${year}&limit=1000`),
+      force,
+    );
+    const matches = (data.events ?? [])
+      .map((ev: Json) => ({ ...toMatch(ev, none, noStages, noGroups), stage: 'REGULAR_SEASON' }))
+      .filter((m: Match) => !m.home.tbd && !m.away.tbd)
+      .sort((a: Match, b: Match) => a.utcDate.localeCompare(b.utcDate));
+    const played = new Map<number, number>();
+    for (const m of matches) {
+      const n = Math.max(played.get(m.home.id) ?? 0, played.get(m.away.id) ?? 0) + 1;
+      played.set(m.home.id, (played.get(m.home.id) ?? 0) + 1);
+      played.set(m.away.id, (played.get(m.away.id) ?? 0) + 1);
+      m.matchday = n;
+    }
+    return matches;
+  }
+
+  const read = async (force: boolean) => {
+    const matches = await season(opts.year, ttl, force);
+    ttl = isMatchTime(matches) ? 30_000 : 5 * 60_000;
+    return matches;
+  };
+
+  return {
+    name: 'ESPN',
+    getMatches: () => read(false),
+    refreshMatches: () => read(true),
+    async getScorers() {
+      return null;
+    },
+    async getPreviousSeasons(count: number) {
+      const out = [];
+      for (let i = 1; i <= count; i++) out.push({ season: String(opts.year - i), matches: await season(opts.year - i, 86_400_000) });
       return out;
     },
   };

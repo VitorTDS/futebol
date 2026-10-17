@@ -476,10 +476,23 @@ export function createCup(o: CupOptions) {
   const matches = async () => (await getAnalysis()).matches;
 
   /** Placares direto da fonte (para o ao vivo, sem refazer a análise) */
-  const liveMatches = async () => (provider ? provider.getMatches() : []);
+  const liveMatches = async () => (provider ? provider.refreshMatches() : []);
+
+  /** Jogos entre duas datas, com a previsão (para a agenda de todos os campeonatos) */
+  async function agenda(from: number, to: number) {
+    const a = await getAnalysis();
+    return a.matches
+      .filter((m) => !m.home.tbd && !m.away.tbd && Date.parse(m.utcDate) >= from && Date.parse(m.utcDate) <= to)
+      .map((m) => ({
+        ...m,
+        comp: o.key,
+        stageLabel: STAGE_LABELS[m.stage ?? ''] ?? '',
+        prediction: isFinished(m) ? null : predictMatch(modelFor(a, m), m),
+      }));
+  }
 
   /** Situação da fonte (null: copa sem fonte configurada) */
   const health = () => provider?.health() ?? null;
 
-  return { router, outcomes, matches, liveMatches, teamSummary, health };
+  return { router, outcomes, matches, liveMatches, teamSummary, health, agenda };
 }

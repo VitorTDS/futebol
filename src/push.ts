@@ -18,6 +18,31 @@ interface Prefs {
   teams: number[];
   /** Também avisa início e fim de jogo */
   kickoff: boolean;
+  /** Lembrete 30 minutos antes do jogo */
+  reminder: boolean;
+  /** No fim do jogo do Brasileirão, como ficaram as chances */
+  summary: boolean;
+  /** Quando a chance de um time seguido muda muito depois de uma rodada */
+  changes: boolean;
+}
+
+/** Tipo de aviso: gol sempre vai; os outros, só para quem pediu */
+export type PushKind = 'goal' | 'kickoff' | 'fulltime' | 'reminder' | 'summary' | 'change';
+
+function wants(p: Prefs, kind: PushKind): boolean {
+  if (kind === 'goal') return true;
+  if (kind === 'kickoff' || kind === 'fulltime') return p.kickoff;
+  if (kind === 'reminder') return p.reminder;
+  if (kind === 'summary') return p.summary;
+  return p.changes;
+}
+
+export interface PushMessage {
+  title: string;
+  body: string;
+  icon?: string;
+  tag: string;
+  url: string;
 }
 
 interface Subscriber {
@@ -67,7 +92,7 @@ function save() {
   }).catch((err) => console.warn('Push: não foi possível salvar as inscrições:', err.message));
 }
 
-const follows = (p: Prefs, ev: LiveEvent) => p.all || p.teams.includes(ev.home.id) || p.teams.includes(ev.away.id);
+const follows = (p: Prefs, teamIds: number[]) => p.all || teamIds.some((id) => p.teams.includes(id));
 
 /** Texto da notificação (o mesmo da página) */
 function message(ev: LiveEvent, url: string) {
@@ -82,30 +107,47 @@ function message(ev: LiveEvent, url: string) {
 type Send = (sub: webpush.PushSubscription, payload: string, options: webpush.RequestOptions) => Promise<unknown>;
 
 /**
- * Manda os eventos de um campeonato para quem segue. `jogoUrl` monta o link de
- * cada jogo; `send` só muda nos testes.
+ * Manda uma notificação para quem segue algum dos times (e pediu esse tipo de aviso).
+ * `skip` tira alguém da lista (ex.: quem já vai receber o resumo do jogo). `send` só muda nos testes.
  */
-export async function pushEvents(events: LiveEvent[], jogoUrl: (matchId: number) => string, send: Send = webpush.sendNotification): Promise<void> {
-  if (!events.length || !subscribers.size) return;
+export async function pushMessage(
+  teamIds: number[],
+  kind: PushKind,
+  msg: PushMessage,
+  { send = webpush.sendNotification as Send, skip }: { send?: Send; skip?: (p: Prefs) => boolean } = {},
+): Promise<void> {
+  if (!subscribers.size) return;
   await setup();
+  const payload = JSON.stringify(msg);
   const sends: Promise<unknown>[] = [];
-  for (const ev of events) {
-    const payload = JSON.stringify(message(ev, jogoUrl(ev.matchId)));
-    for (const [endpoint, s] of subscribers) {
-      if (ev.type !== 'goal' && !s.prefs.kickoff) continue;
-      if (!follows(s.prefs, ev)) continue;
-      sends.push(
-        send(s.subscription, payload, { TTL: 600, urgency: 'high' }).catch((err: webpush.WebPushError) => {
-          // 404/410: o aparelho cancelou a inscrição
-          if (err.statusCode === 404 || err.statusCode === 410) {
-            subscribers.delete(endpoint);
-            save();
-          } else console.warn('Push: falha ao enviar:', err.statusCode ?? '', err.message);
-        }),
-      );
-    }
+  for (const [endpoint, s] of subscribers) {
+    if (!wants(s.prefs, kind) || !follows(s.prefs, teamIds) || skip?.(s.prefs)) continue;
+    sends.push(
+      send(s.subscription, payload, { TTL: 600, urgency: kind === 'goal' ? 'high' : 'normal' }).catch((err: webpush.WebPushError) => {
+        // 404/410: o aparelho cancelou a inscrição
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          subscribers.delete(endpoint);
+          save();
+        } else console.warn('Push: falha ao enviar:', err.statusCode ?? '', err.message);
+      }),
+    );
   }
   await Promise.all(sends);
+}
+
+/**
+ * Manda os eventos de um campeonato para quem segue. `jogoUrl` monta o link de
+ * cada jogo. Com `withSummary`, quem pediu o resumo recebe ele no lugar do "Fim de jogo".
+ */
+export async function pushEvents(
+  events: LiveEvent[],
+  jogoUrl: (matchId: number) => string,
+  { send, withSummary = false }: { send?: Send; withSummary?: boolean } = {},
+): Promise<void> {
+  for (const ev of events) {
+    const skip = ev.type === 'fulltime' && withSummary ? (p: Prefs) => p.summary : undefined;
+    await pushMessage([ev.home.id, ev.away.id], ev.type, message(ev, jogoUrl(ev.matchId)), { send, skip });
+  }
 }
 
 export const push = express.Router();
@@ -132,6 +174,9 @@ push.post('/subscribe', async (req, res, next) => {
       all: !!p.all,
       teams: Array.isArray(p.teams) ? p.teams.map(Number).filter(Number.isFinite).slice(0, 100) : [],
       kickoff: !!p.kickoff,
+      reminder: !!p.reminder,
+      summary: !!p.summary,
+      changes: !!p.changes,
     };
     subscribers.set(sub.endpoint, { subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } }, prefs, updatedAt: new Date().toISOString() });
     save();

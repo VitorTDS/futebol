@@ -44,7 +44,7 @@ test('gol vai só para quem segue o time; início de jogo só para quem pediu', 
       { type: 'kickoff', matchId: 9, home: a, away: b },
       { type: 'goal', matchId: 9, side: 'home', home: a, away: b, homeGoals: 1, awayGoals: 0, minute: 12 },
     ];
-    await pushEvents(events, (id) => `/#/jogo/${id}`, send);
+    await pushEvents(events, (id) => `/#/jogo/${id}`, { send });
     const got = (name: string) => received.get(`https://push.example/${name}`) ?? [];
     assert.deepEqual(got('torcedor-1').map((m) => m.title), [`GOL do ${a.shortName}!`], 'só o gol (não pediu início de jogo)');
     assert.equal(got('torcedor-1')[0].url, '/#/jogo/9');
@@ -66,6 +66,34 @@ test('mensagem sai criptografada e assinada com as chaves do painel', async () =
     assert.equal(req.headers['Content-Encoding'], 'aes128gcm');
     assert.match(String(req.headers.Authorization), /^vapid t=/);
     assert.ok((req.body as Buffer).length > 0);
+  } finally {
+    api.close();
+  }
+});
+
+test('lembrete e resumo vão só para quem pediu; quem pediu resumo não recebe o "Fim de jogo" simples', async () => {
+  const { pushMessage } = await import('../src/push.ts');
+  const app = express().use('/api/push', push);
+  const api = app.listen(0);
+  const base = `http://localhost:${(api.address() as AddressInfo).port}/api/push`;
+  const subscribe = (name: string, prefs: object) =>
+    fetch(`${base}/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: subscription(`https://push.example/k-${name}`), prefs }) });
+  const received = new Map<string, string[]>();
+  const send = async (sub: { endpoint: string }, payload: string) => {
+    received.set(sub.endpoint, [...(received.get(sub.endpoint) ?? []), JSON.parse(payload).title]);
+  };
+  const got = (name: string) => received.get(`https://push.example/k-${name}`) ?? [];
+  try {
+    await subscribe('lembrete', { teams: [7], reminder: true });
+    await subscribe('resumo', { teams: [7], kickoff: true, summary: true });
+    await subscribe('simples', { teams: [7], kickoff: true });
+    await pushMessage([7, 8], 'reminder', { title: 'Daqui a pouco', body: '', tag: 'x', url: '/' }, { send });
+    const [a, b] = [team(7), team(8)];
+    await pushEvents([{ type: 'fulltime', matchId: 1, home: a, away: b, homeGoals: 2, awayGoals: 1 }], () => '/', { send, withSummary: true });
+    await pushMessage([7, 8], 'summary', { title: 'Resumo', body: '', tag: 'x', url: '/' }, { send });
+    assert.deepEqual(got('lembrete'), ['Daqui a pouco']);
+    assert.deepEqual(got('resumo'), ['Resumo']);
+    assert.deepEqual(got('simples'), ['Fim de jogo']);
   } finally {
     api.close();
   }
