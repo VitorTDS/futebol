@@ -1,0 +1,11 @@
+{
+  "name": "Painel do Brasileirão",
+  "short_name": "Brasileirão",
+  "description": "Tabela, jogos ao vivo, previsões e simulador do Brasileirão",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4efe3",
+  "theme_color": "#1f3a2c",
+  "icons": [{ "src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

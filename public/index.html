@@ -4,8 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#1f3a2c" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <title>Painel do Brasileirão</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
+    <link rel="icon" href="icone.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;800&family=Permanent+Marker&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
@@ -41,6 +42,10 @@
           <button class="tab" data-tab="artilharia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 12h8M12 8v8"/></svg><span class="full">Artilharia</span><span class="short">Gols</span></button>
           <button class="tab" data-tab="scout"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5"/></svg><span class="full">Scout</span><span class="short">Scout</span></button>
         </nav>
+        <button id="bell" class="bell" aria-label="Alertas de gol" title="Alertas de gol">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+          <span class="bell-dot" hidden></span>
+        </button>
       </div>
 
       <div id="destaque" class="destaque"></div>
@@ -317,6 +322,31 @@
         <div id="scorers"></div>
       </section>
     </main>
+
+    <dialog id="alert-dialog" class="alert-dialog" aria-labelledby="alert-title">
+      <form method="dialog">
+        <header>
+          <h2 id="alert-title">Alertas de gol</h2>
+          <button class="fechar" value="fechar" aria-label="Fechar">×</button>
+        </header>
+        <label class="switch"><input type="checkbox" id="al-on" /> <span>Avisar quando sair gol</span></label>
+        <div id="al-opcoes">
+          <p class="al-sub">De quais times?</p>
+          <label class="switch"><input type="checkbox" id="al-todos" /> <span>Todos os jogos</span></label>
+          <div id="al-times" class="al-times"></div>
+          <p class="al-sub">Como avisar</p>
+          <label class="switch"><input type="checkbox" id="al-som" /> <span>Som</span></label>
+          <label class="switch" id="al-vibrar-row"><input type="checkbox" id="al-vibrar" /> <span>Vibrar (Android)</span></label>
+          <label class="switch" id="al-notif-row"><input type="checkbox" id="al-notif" /> <span>Notificação do sistema, mesmo com a aba em segundo plano</span></label>
+          <p id="al-notif-info" class="al-info" hidden></p>
+          <label class="switch"><input type="checkbox" id="al-inicio" /> <span>Avisar também início e fim de jogo</span></label>
+          <button type="button" id="al-testar" class="small-btn">Testar alerta</button>
+        </div>
+        <p class="al-info">O aviso aparece enquanto o painel estiver aberto. Com o celular bloqueado ou o painel fechado, só com o painel hospedado em endereço seguro (https).</p>
+      </form>
+    </dialog>
+
+    <div id="toasts" class="toasts" aria-live="assertive"></div>
 
     <script src="app.js"></script>
   </body>
