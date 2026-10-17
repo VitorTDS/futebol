@@ -88,7 +88,7 @@ async function shareMatch() {
   const m = d.match;
   const comp = d.competition ? `${compName(d.competition)} · ${d.stageLabel}` : `Brasileirão · Rodada ${m.matchday}`;
   const played = m.status === 'FINISHED' || m.status === 'LIVE';
-  const when = new Date(m.utcDate).toLocaleString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const when = kickoffText(m.utcDate, { long: true });
   const { c, g, t } = await shareCanvas(1080, played ? (m.status === 'LIVE' ? 'Ao vivo' : 'Fim de jogo') : 'Vem jogo aí', comp);
   const [ch, ca] = await Promise.all([loadCrest(m.home), loadCrest(m.away)]);
   const crest = (img, x) => img && g.drawImage(img, x - 110, 230, 220, 220);

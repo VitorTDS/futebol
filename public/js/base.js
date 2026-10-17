@@ -76,6 +76,25 @@ async function api(path) {
   return body;
 }
 
+/**
+ * Dia do jogo pelo relógio do aparelho: "Hoje", "Amanhã", "Ontem" ou o dia da
+ * semana com a data. É calculado na hora de desenhar, então o jogo de "amanhã"
+ * vira "hoje" sozinho quando o dia vira (a página se redesenha à meia-noite).
+ */
+function dayName(date, { long = false } = {}) {
+  const d = new Date(date);
+  const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  // round: dia com horário de verão tem 23 ou 25 horas
+  const diff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
+  if (diff === 0) return 'Hoje';
+  if (diff === 1) return 'Amanhã';
+  if (diff === -1) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', long ? { weekday: 'long', day: '2-digit', month: '2-digit' } : { weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+
+/** "Hoje · 18:00", "Amanhã · 12:00", "qua., 21/10 · 21:30" */
+const kickoffText = (date, opts) => `${dayName(date, opts)} · ${new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
 function pct(p) {
   if (p == null) return '–';
   if (p === 0) return '–';

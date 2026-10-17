@@ -29,6 +29,17 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) refresh();
 });
 
+// Quando o dia vira, redesenha a tela: "Amanhã" passa a "Hoje" sem esperar a próxima atualização
+function scheduleMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+  setTimeout(() => {
+    refresh();
+    scheduleMidnight();
+  }, next - now);
+}
+
 applyRoute();
+scheduleMidnight();
 connectLive();
 setInterval(refresh, REFRESH_MS);

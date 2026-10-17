@@ -25,7 +25,7 @@ function tieCard(t, champions) {
   const legs = t.legs
     .map((l) => {
       const played = l.status === 'FINISHED' || l.status === 'LIVE';
-      const date = new Date(l.utcDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      const date = dayName(l.utcDate);
       const pen = l.penalties ? ` (pên. ${l.penalties[0]}–${l.penalties[1]})` : '';
       if (l.home.tbd) return `<span class="perna">${date} · jogo único, campo neutro</span>`;
       return `<a href="${jogoHref(l.id)}" class="perna">${played ? `${escapeHtml(l.home.tla)} ${l.homeGoals}–${l.awayGoals} ${escapeHtml(l.away.tla)}${pen}` : `${date} · ${escapeHtml(l.home.tla)} x ${escapeHtml(l.away.tla)}`}${l.status === 'LIVE' ? ' <span class="live-tag">●</span>' : ''}</a>`;

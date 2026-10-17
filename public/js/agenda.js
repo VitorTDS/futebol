@@ -1,6 +1,7 @@
 // ---------- Agenda: jogos de todos os campeonatos ----------
 
-state.agenda = { days: 7, mine: store.get('agenda.meus', false), matches: [] };
+// view: 'hoje', 'amanha' ou quantos dias (7, 14, 30)
+state.agenda = { view: store.get('agenda.quando', '7'), mine: store.get('agenda.meus', false), matches: [] };
 
 /** Times que a pessoa segue: os do sino e o "seu time" do "e se" */
 function followedTeams() {
@@ -10,21 +11,24 @@ function followedTeams() {
   return ids;
 }
 
-/** "Hoje", "Amanhã" ou "sábado, 24/10", no fuso do aparelho */
+/** Título do dia na agenda: "Hoje · sábado, 17/10", "Amanhã · domingo, 18/10" ou só a data */
 function dayLabel(date) {
-  const key = (d) => d.toLocaleDateString('pt-BR');
-  const today = new Date();
-  const tomorrow = new Date(Date.now() + 86_400_000);
   const name = date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
-  if (key(date) === key(today)) return `Hoje · ${name}`;
-  if (key(date) === key(tomorrow)) return `Amanhã · ${name}`;
-  return name;
+  const rel = dayName(date);
+  return ['Hoje', 'Amanhã'].includes(rel) ? `${rel} · ${name}` : name;
 }
+
+const AGENDA_EMPTY = { hoje: 'hoje', amanha: 'amanhã' };
 
 
 async function loadAgenda() {
   const ag = state.agenda;
-  const data = await api(`/api/agenda?dias=${ag.days}`);
+  document.querySelectorAll('#agenda-quando button').forEach((b) => b.classList.toggle('on', b.dataset.v === ag.view));
+  const span = ag.view === 'hoje' ? 1 : ag.view === 'amanha' ? 2 : Number(ag.view);
+  const data = await api(`/api/agenda?dias=${span}`);
+  // Hoje e Amanhã: só os jogos daquele dia, pelo relógio do aparelho
+  if (ag.view === 'hoje') data.matches = data.matches.filter((m) => dayName(m.utcDate) === 'Hoje');
+  if (ag.view === 'amanha') data.matches = data.matches.filter((m) => dayName(m.utcDate) === 'Amanhã');
   const followed = followedTeams();
   $('#agenda-meus').checked = ag.mine && followed.size > 0;
   $('#agenda-meus').disabled = !followed.size;
@@ -47,7 +51,7 @@ async function loadAgenda() {
           <div class="matches">${ms.map((m) => agendaCard(m, data.watchUrl)).join('')}</div>`,
         )
         .join('')
-    : `<div class="empty">Nenhum jogo nos próximos ${ag.days} dias${ag.mine ? ' dos times que você segue' : ''}.</div>`;
+    : `<div class="empty">Nenhum jogo ${AGENDA_EMPTY[ag.view] ?? `nos próximos ${ag.view} dias`}${ag.mine ? ' dos times que você segue' : ''}.</div>`;
   growBars($('#agenda-lista'));
 }
 
@@ -116,7 +120,10 @@ $('#agenda-meus').addEventListener('change', (e) => {
   refresh();
 });
 
-$('#agenda-dias').addEventListener('change', (e) => {
-  state.agenda.days = Number(e.target.value);
+$('#agenda-quando').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b) return;
+  state.agenda.view = b.dataset.v;
+  store.set('agenda.quando', b.dataset.v);
   refresh();
 });

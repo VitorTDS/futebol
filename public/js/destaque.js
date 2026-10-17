@@ -26,13 +26,11 @@ async function loadHero() {
   const live = m.status === 'LIVE';
   const finished = m.status === 'FINISHED';
   const date = new Date(m.utcDate);
-  const when = date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
-  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const tag = live
     ? `<span class="tag-vivo"><i></i>AO VIVO${m.minute ? ` · ${m.minute}'` : ''}</span>`
     : finished
       ? '<span class="tag-vivo fim">ENCERRADO</span>'
-      : `<span class="tag-vivo proximo">PRÓXIMO JOGO · ${escapeHtml(when)} · ${time}</span>`;
+      : `<span class="tag-vivo proximo">PRÓXIMO JOGO · ${escapeHtml(kickoffText(date, { long: true }))}</span>`;
   const side = (t) => {
     const href = teamHref(t.id);
     const inner = `${crestImg(t)}<b>${escapeHtml(t.shortName)}</b>`;

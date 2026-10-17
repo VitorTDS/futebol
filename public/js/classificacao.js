@@ -132,7 +132,7 @@ async function loadStrip() {
       const live = m.status === 'LIVE';
       const finished = m.status === 'FINISHED';
       const date = new Date(m.utcDate);
-      const when = date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+      const when = dayName(date);
       const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const p = m.prediction;
       return `<a class="jogo ${live ? 'live' : ''}" href="${jogoHref(m.id)}" style="animation-delay:${i * 50}ms">

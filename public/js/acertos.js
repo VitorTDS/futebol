@@ -328,7 +328,7 @@ async function loadMercado() {
           const trio = (x) => `${pct(x.H)} · ${pct(x.D)} · ${pct(x.A)}`;
           const who = SIDE_NAME[r.biggest.side](m);
           const pts = Math.round(Math.abs(r.biggest.diff) * 100);
-          const date = new Date(m.utcDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+          const date = kickoffText(m.utcDate);
           return `<tr class="linha-jogo" data-jogo="${m.id}">
             <td class="left"><span class="matchup">${teamHtml(m.home, { short: true })} x ${teamHtml(m.away, { short: true })}</span></td>
             <td>${date}</td><td>${trio(r.model)}</td><td>${trio(r.market)}</td>

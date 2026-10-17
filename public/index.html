@@ -216,9 +216,15 @@
 
       <section id="agenda" class="panel">
         <h2 class="sec">Agenda <span class="nota">todos os campeonatos</span></h2>
+        <div id="agenda-quando" class="fases" role="group" aria-label="Quando">
+          <button data-v="hoje">Hoje</button>
+          <button data-v="amanha">Amanhã</button>
+          <button data-v="7">7 dias</button>
+          <button data-v="14">14 dias</button>
+          <button data-v="30">30 dias</button>
+        </div>
         <div class="ese-bar">
           <label class="chk"><input type="checkbox" id="agenda-meus" /> Só os times que eu sigo</label>
-          <label>Próximos <select id="agenda-dias" aria-label="Quantos dias"><option value="7">7 dias</option><option value="14">14 dias</option><option value="30">30 dias</option></select></label>
           <button id="agenda-ics" class="small-btn">📅 Pôr todos na agenda do celular</button>
         </div>
         <p class="muted" id="agenda-nota"></p>

@@ -51,7 +51,9 @@ function renderMatchPage() {
   const live = m.status === 'LIVE';
   const finished = m.status === 'FINISHED';
   const date = new Date(m.utcDate);
-  const when = date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  // Hoje/amanhã/ontem pelo nome; os outros dias com a data por extenso
+  const near = ['Hoje', 'Amanhã', 'Ontem'].includes(dayName(date));
+  const when = near ? dayName(date) : date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
   const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const status = live
     ? `<span class="live-tag">● AO VIVO${m.minute ? ` · ${m.minute}'` : ''}</span>`

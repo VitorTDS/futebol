@@ -3,7 +3,6 @@
 // `showComp`: mostra sempre o campeonato (na agenda, que mistura todos)
 function matchCard(m, watchUrl, { showComp = false } = {}) {
   const date = new Date(m.utcDate);
-  const when = date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
   const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const live = m.status === 'LIVE';
   const finished = m.status === 'FINISHED';
@@ -12,7 +11,7 @@ function matchCard(m, watchUrl, { showComp = false } = {}) {
     ? `<span class="live-tag">● AO VIVO${m.minute ? ` ${m.minute}'` : ''}</span>`
     : finished
       ? 'Encerrado'
-      : `${when} · ${time}`;
+      : kickoffText(date);
 
   const score =
     finished || live

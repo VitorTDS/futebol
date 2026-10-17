@@ -86,7 +86,7 @@ function renderWhatifMatches() {
       const date = new Date(m.utcDate);
       const when = live
         ? `<span class="live-tag">● ${m.homeGoals ?? 0} × ${m.awayGoals ?? 0} ${m.minute ? `${m.minute}'` : ''}</span>`
-        : `${date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+        : kickoffText(date);
       const mine = myTeam && (m.home.id === myTeam || m.away.id === myTeam);
       const btn = (k, chance) =>
         `<button data-id="${m.id}" data-p="${k}" class="${pick === k ? 'on' : ''}" aria-pressed="${pick === k}">${PICK_LABEL[k]}<small>${pct(chance)}</small></button>`;
