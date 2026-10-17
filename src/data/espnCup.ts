@@ -5,7 +5,7 @@
 import { cached } from './cache.ts';
 import { ESPN_TEAMS, type EspnLeague } from './espn.ts';
 import { isMatchTime } from '../model/liveEvents.ts';
-import type { DataProvider, Match, MatchStatus, Team } from '../types.ts';
+import type { DataProvider, Match, MatchStatus, Scorer, Team } from '../types.ts';
 
 const BASE_URL = 'https://site.api.espn.com/apis';
 
@@ -93,6 +93,33 @@ async function getJson(url: string): Promise<Json> {
   return res.json();
 }
 
+/**
+ * Artilharia somando os gols de cada jogo (a ESPN não tem a lista pronta dessas
+ * copas). Não contam gol contra nem pênalti de disputa por pênaltis.
+ */
+export function scorersFrom(events: Json[], known: Map<number, Team>): Scorer[] {
+  const teams = new Map<number, Team>();
+  for (const ev of events) for (const c of ev.competitions?.[0]?.competitors ?? []) {
+    const t = toTeam(c, known);
+    if (!t.tbd) teams.set(t.id, t);
+  }
+  const byPlayer = new Map<string, Scorer>();
+  for (const ev of events) {
+    for (const d of ev.competitions?.[0]?.details ?? []) {
+      if (!d.scoringPlay || d.shootout || d.ownGoal) continue;
+      const player = d.athletesInvolved?.[0];
+      const team = teams.get(teamId(d.team?.id));
+      if (!player?.displayName || !team) continue;
+      const key = `${player.id ?? player.displayName}:${team.id}`;
+      const s = byPlayer.get(key) ?? { player: player.displayName, team, goals: 0, assists: null, penalties: 0 };
+      s.goals++;
+      if (d.penaltyKick) s.penalties!++;
+      byPlayer.set(key, s);
+    }
+  }
+  return [...byPlayer.values()].sort((a, b) => b.goals - a.goals || a.penalties! - b.penalties! || a.player.localeCompare(b.player)).slice(0, 50);
+}
+
 /** Time → grupo ("GROUP_A"), pela tabela da ESPN; vazio se a copa não tem grupos */
 async function groups(league: EspnLeague, year: number): Promise<Map<number, string>> {
   const data = await cached(`espn-groups-${league}-${year}`, 6 * 3_600_000, () =>
@@ -122,12 +149,15 @@ export function createEspnCupProvider(opts: {
   let ttl = 5 * 60_000;
   const known = async () => new Map((await opts.leagueTeams().catch(() => [] as Team[])).map((t) => [t.id, t]));
 
-  async function season(year: number, ttlMs: number, k: Map<number, Team>): Promise<Match[]> {
-    const data = await cached(`espn-cup-${opts.league}-${year}`, ttlMs, () =>
+  const events = (year: number, ttlMs: number): Promise<Json[]> =>
+    cached(`espn-cup-${opts.league}-${year}`, ttlMs, () =>
       getJson(`${BASE_URL}/site/v2/sports/soccer/${opts.league}/scoreboard?dates=${year}&limit=1000`),
-    );
+    ).then((data) => data.events ?? []);
+
+  async function season(year: number, ttlMs: number, k: Map<number, Team>): Promise<Match[]> {
+    const evs = await events(year, ttlMs);
     const groupOf = opts.hasGroups ? await groups(opts.league, year).catch(() => new Map<number, string>()) : new Map<number, string>();
-    return (data.events ?? []).map((ev: Json) => toMatch(ev, k, stageBySlug, groupOf));
+    return evs.map((ev: Json) => toMatch(ev, k, stageBySlug, groupOf));
   }
 
   return {
@@ -139,7 +169,7 @@ export function createEspnCupProvider(opts: {
       return matches;
     },
     async getScorers() {
-      return null;
+      return scorersFrom(await events(opts.year, ttl), await known());
     },
     async getPreviousSeasons(count: number) {
       const k = await known();

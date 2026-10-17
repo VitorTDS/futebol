@@ -1,0 +1,24 @@
+# Hospedagem no Render (https://render.com): em "New → Blueprint", aponte para
+# este repositório. Os valores marcados com sync: false são pedidos na hora
+# (ficam guardados no Render, nunca no GitHub).
+services:
+  - type: web
+    name: painel-futebol
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: FOOTBALL_DATA_TOKEN
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: APIFOOTBALL_KEY
+        sync: false

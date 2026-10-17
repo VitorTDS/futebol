@@ -31,6 +31,7 @@
           <div>
             <h1><b id="brand-nome">Brasileirão</b> <span>Ao Vivo</span></h1>
             <p id="meta">Carregando…</p>
+            <p id="fonte-aviso" class="fonte-aviso" hidden></p>
           </div>
         </a>
         <div class="comp-switch" role="group" aria-label="Campeonato">
@@ -64,9 +65,11 @@
           <button class="tab lib-tab" data-tab="lib/grupos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h8v7H3zM13 4h8v7h-8zM3 13h8v7H3zM13 13h8v7h-8z"/></svg><span class="full">Grupos</span><span class="short">Grupos</span></button>
           <button class="tab cdb-tab" data-tab="cdb/chave"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h5v4H3zM3 15h5v4H3zM16 10h5v4h-5zM8 7h4v10H8M12 12h4"/></svg><span class="full">Chaveamento</span><span class="short">Chave</span></button>
           <button class="tab cdb-tab" data-tab="cdb/jogos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4 3 2-1 4h-4l-1-4z"/></svg><span class="full">Jogos</span><span class="short">Jogos</span></button>
+          <button class="tab cdb-tab" data-tab="cdb/gols"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 12h8M12 8v8"/></svg><span class="full">Artilharia</span><span class="short">Gols</span></button>
           <button class="tab sula-tab" data-tab="sula/chave"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h5v4H3zM3 15h5v4H3zM16 10h5v4h-5zM8 7h4v10H8M12 12h4"/></svg><span class="full">Chaveamento</span><span class="short">Chave</span></button>
           <button class="tab sula-tab" data-tab="sula/jogos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4 3 2-1 4h-4l-1-4z"/></svg><span class="full">Jogos</span><span class="short">Jogos</span></button>
           <button class="tab sula-tab" data-tab="sula/grupos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h8v7H3zM13 4h8v7h-8zM3 13h8v7H3zM13 13h8v7h-8z"/></svg><span class="full">Grupos</span><span class="short">Grupos</span></button>
+          <button class="tab sula-tab" data-tab="sula/gols"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 12h8M12 8v8"/></svg><span class="full">Artilharia</span><span class="short">Gols</span></button>
           <button class="tab lib-tab" data-tab="lib/gols"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 12h8M12 8v8"/></svg><span class="full">Artilharia</span><span class="short">Gols</span></button>
         </nav>
         <button id="bell" class="bell" aria-label="Alertas de gol" title="Alertas de gol">
@@ -151,6 +154,10 @@
               <button id="ese-next" aria-label="Próxima rodada">›</button>
             </div>
             <div id="ese-matches" class="ese-matches"></div>
+            <div id="ese-copas-box" hidden>
+              <h3 class="ese-h3">E nas copas? <span class="muted">quem passa em cada confronto</span></h3>
+              <div id="ese-copas" class="ese-matches"></div>
+            </div>
           </div>
           <div>
             <h3 class="ese-h3">Como fica <span id="ese-status" class="muted"></span></h3>
@@ -234,6 +241,10 @@
         <a href="#/tabela" class="back">← Classificação</a>
         <div id="team-header" class="team-header"></div>
         <div id="team-stats" class="stats"></div>
+        <div id="team-cups-box" hidden>
+          <h3>Nas copas</h3>
+          <div id="team-cups" class="copas-time"></div>
+        </div>
 
         <div class="chart-grid">
           <figure class="chart-card">
@@ -344,12 +355,14 @@
       </section>
 
       <section id="lib-gols" class="panel">
-        <h2 class="sec">Artilharia <span class="nota">da Libertadores</span></h2>
+        <h2 class="sec">Artilharia <span class="nota" id="gols-nota">da Libertadores</span></h2>
+        <p class="muted" id="gols-aviso" hidden></p>
         <div id="lib-scorers"></div>
       </section>
 
       <section id="lib-time" class="panel">
         <a href="#/lib/grupos" class="back" id="lib-time-back">← Libertadores</a>
+        <a href="#/tabela" class="back na-liga" id="lib-time-bsa" hidden>Ver no Brasileirão ›</a>
         <div id="lib-team-header" class="team-header"></div>
         <div id="lib-team-stats" class="stats"></div>
 

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { config } from './config.ts';
 import { createFootballDataProvider } from './data/footballData.ts';
 import { createMockProvider } from './data/mock.ts';
+import { resilient } from './data/resilient.ts';
 import { createApiFootballPlayerProvider } from './data/players/apiFootball.ts';
 import { createMockPlayerProvider } from './data/players/mock.ts';
 import type { BacktestResult } from './model/backtest.ts';
@@ -16,22 +17,27 @@ import { isMatchTime, liveEvents } from './model/liveEvents.ts';
 import { applyPick, pickedScores, type Pick } from './model/whatif.ts';
 import { simulateSeason, type TeamOutlook, type ZoneOutlook } from './model/simulation.ts';
 import { CUPS_2026, type ContinentalCups, type Cup } from './data/copas.ts';
-import { getMatchCenter } from './data/espn.ts';
+import { getMatchCenter, getTeamColors } from './data/espn.ts';
 import { createCopaDoBrasilCup } from './copaDoBrasil.ts';
 import { libertadoresCup } from './libertadores.ts';
+import { push, pushEvents } from './push.ts';
 import { createSulamericanaCup } from './sulamericana.ts';
 import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
 import type { Match, PlayerStats, Position, Team } from './types.ts';
 
-const provider = config.footballDataToken
-  ? createFootballDataProvider({
-      token: config.footballDataToken,
-      competition: config.competition,
-      season: config.season,
-    })
-  : createMockProvider();
+// Se a fonte cair, segue com os últimos placares (e o painel avisa)
+const provider = resilient(
+  config.footballDataToken
+    ? createFootballDataProvider({
+        token: config.footballDataToken,
+        competition: config.competition,
+        season: config.season,
+      })
+    : createMockProvider(),
+  'Brasileirão',
+);
 
 const playerProvider = config.apiFootballKey
   ? createApiFootballPlayerProvider({
@@ -410,14 +416,38 @@ app.get(
   }),
 );
 
+/** Copas com os palpites do "e se" ({ lib: {...}, cdb: {...}, sula: {...} }) aplicados. */
+async function cupsWithPicks(a: Analysis, cupPicks: unknown): Promise<ContinentalCups | null> {
+  if (!a.cups || !cupPicks || typeof cupPicks !== 'object') return a.cups;
+  const picks = cupPicks as Record<string, unknown>;
+  const ids = new Set(a.teams.map((t) => t.id));
+  const cups = { ...a.cups };
+  const sources = [
+    ['lib', libertadoresCup, 'libertadores', false],
+    ['cdb', copaDoBrasilCup, 'copaDoBrasil', true],
+    ['sula', sulamericanaCup, 'sulamericana', false],
+  ] as const;
+  await Promise.all(
+    sources.map(async ([key, cup, field, withRunnerUp]) => {
+      const p = picks[key];
+      if (!p || typeof p !== 'object' || !Object.keys(p).length) return;
+      const r = await cup.outcomes(ids, withRunnerUp, p).catch(() => null);
+      if (r?.odds.length) cups[field] = { ...cups[field], odds: r.odds };
+    }),
+  );
+  return cups;
+}
+
 app.post(
   '/api/whatif',
   express.json({ limit: '16kb' }),
   route(async (req, res) => {
     const a = await getAnalysis();
     const forced = pickedScores(a.matches, req.body?.picks ?? {});
+    // Palpites nas copas (quem passa em cada confronto) mudam quem leva as vagas extras
+    const cups = await cupsWithPicks(a, req.body?.cupPicks);
     // O modelo (força dos times) fica o mesmo: só os resultados escolhidos mudam
-    const outlook = runSimulation(a.teams, a.matches, a.model, a.cups, WHATIF_RUNS, WHATIF_SEED, forced);
+    const outlook = runSimulation(a.teams, a.matches, a.model, cups, WHATIF_RUNS, WHATIF_SEED, forced);
     res.json({ runs: WHATIF_RUNS, teams: outlook.teams, base: whatifBaseline(a), zones: outlook.zones.likely });
   }),
 );
@@ -503,9 +533,11 @@ app.get(
   route(async (_req, res) => {
     const a = await getAnalysis();
     const { matchdays, positions } = computeEvolution(a.teams, a.matches);
+    // Cores dos clubes (da ESPN); sem elas, o gráfico usa cores genéricas
+    const colors = await getTeamColors().catch(() => new Map<number, string>());
     res.json({
       matchdays,
-      teams: a.standings.map((row) => ({ team: row.team, positions: positions.get(row.team.id) })),
+      teams: a.standings.map((row) => ({ team: row.team, positions: positions.get(row.team.id), color: colors.get(row.team.id) ?? null })),
     });
   }),
 );
@@ -551,6 +583,10 @@ app.get(
       evolution: { matchdays, positions: positions.get(id) },
       results: results.reverse(),
       upcoming,
+      // O mesmo time nas copas (só as que ele joga), para a página mostrar tudo junto
+      cups: (await Promise.allSettled([libertadoresCup, copaDoBrasilCup, sulamericanaCup].map((c) => c.teamSummary(id))))
+        .map((r) => (r.status === 'fulfilled' ? r.value : null))
+        .filter((c) => c != null),
       watchUrl: config.watchUrl,
     });
   }),
@@ -759,6 +795,22 @@ app.get(
 app.use('/api/lib', libertadoresCup.router);
 app.use('/api/cdb', copaDoBrasilCup.router);
 app.use('/api/sula', sulamericanaCup.router);
+app.use('/api/push', push);
+
+// Situação de cada fonte, para a página avisar quando está mostrando placares antigos
+app.get('/api/status', (_req, res) => {
+  res.json({
+    bsa: provider.health(),
+    lib: libertadoresCup.health(),
+    cdb: copaDoBrasilCup.health(),
+    sula: sulamericanaCup.health(),
+  });
+});
+
+// Para a hospedagem saber que o servidor está de pé (e para um "despertador" externo)
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
 // ---------- Ao vivo: avisa as páginas abertas assim que um placar muda ----------
 
@@ -782,27 +834,48 @@ app.get('/api/stream', (req, res) => {
   });
 });
 
-let lastMatches: Match[] | null = null;
+interface LiveSource {
+  comp: string;
+  name: string;
+  getMatches: () => Promise<Match[]>;
+  /** Intervalo com jogo rolando (a football-data grátis aceita 10 pedidos por minuto) */
+  liveDelay: number;
+  jogoUrl: (id: number) => string;
+}
 
-/** Lê os placares de tempos em tempos e manda gols, inícios e fins de jogo para as páginas. */
-async function watchLive() {
-  let delay = 60_000;
-  try {
-    const matches = await provider.getMatches();
-    if (lastMatches) {
-      const events = liveEvents(lastMatches, matches);
-      const changed = matches.some((m, i) => {
-        const o = lastMatches![i];
-        return !o || o.id !== m.id || o.status !== m.status || o.homeGoals !== m.homeGoals || o.awayGoals !== m.awayGoals || o.minute !== m.minute;
-      });
-      if (changed) broadcast('update', { events });
+const LIVE_SOURCES: LiveSource[] = [
+  { comp: 'bsa', name: 'Brasileirão', getMatches: () => provider.getMatches(), liveDelay: 15_000, jogoUrl: (id) => `/#/jogo/${id}` },
+  { comp: 'lib', name: 'Libertadores', getMatches: libertadoresCup.liveMatches, liveDelay: 20_000, jogoUrl: (id) => `/#/lib/jogo/${id}` },
+  { comp: 'cdb', name: 'Copa do Brasil', getMatches: copaDoBrasilCup.liveMatches, liveDelay: 30_000, jogoUrl: (id) => `/#/cdb/jogo/${id}` },
+  { comp: 'sula', name: 'Sul-Americana', getMatches: sulamericanaCup.liveMatches, liveDelay: 30_000, jogoUrl: (id) => `/#/sula/jogo/${id}` },
+];
+
+const sameScore = (a: Match, b: Match) =>
+  a.status === b.status && a.homeGoals === b.homeGoals && a.awayGoals === b.awayGoals && a.minute === b.minute;
+
+/**
+ * Lê os placares de um campeonato de tempos em tempos: avisa as páginas abertas
+ * (para atualizarem na hora) e manda notificação de gol para os celulares inscritos.
+ */
+function watchLive(source: LiveSource) {
+  let last: Map<number, Match> | null = null;
+  const tick = async () => {
+    let delay = 60_000;
+    try {
+      const matches = await source.getMatches();
+      if (last) {
+        const events = liveEvents([...last.values()], matches);
+        if (matches.some((m) => !last!.has(m.id) || !sameScore(last!.get(m.id)!, m))) broadcast('update', { comp: source.comp, events });
+        pushEvents(events, source.jogoUrl).catch((err) => console.warn('Push:', (err as Error).message));
+      }
+      last = new Map(matches.map((m) => [m.id, m]));
+      if (isMatchTime(matches)) delay = source.liveDelay;
+    } catch (err) {
+      console.error(`Falha ao atualizar os placares (${source.name}):`, (err as Error).message);
     }
-    lastMatches = matches;
-    if (isMatchTime(matches)) delay = 15_000;
-  } catch (err) {
-    console.error('Falha ao atualizar os placares:', (err as Error).message);
-  }
-  setTimeout(watchLive, delay);
+    setTimeout(tick, delay);
+  };
+  tick();
 }
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -814,6 +887,6 @@ app.listen(config.port, () => {
   console.log(`⚽ Dashboard rodando em http://localhost:${config.port}`);
   console.log(`   Fonte de dados: ${provider.name} · modelo: ${MODEL_LABELS[config.model]}`);
   getAnalysis().catch(() => {}); // já começa a calcular (e a calibrar) sem esperar a primeira visita
-  watchLive();
+  for (const source of LIVE_SOURCES) watchLive(source);
   if (!config.footballDataToken) console.log('   (crie um arquivo .env com FOOTBALL_DATA_TOKEN para usar dados reais)');
 });

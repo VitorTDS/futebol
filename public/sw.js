@@ -1,5 +1,5 @@
-// Service worker mínimo: só existe para mostrar as notificações de gol e
-// abrir o painel quando a pessoa toca nelas.
+// Service worker mínimo: só existe para mostrar as notificações de gol (inclusive
+// as que o servidor manda com o celular bloqueado) e abrir o painel no toque.
 self.addEventListener('install', () => self.skipWaiting());
 
 // O painel não guarda nada em cache: apaga caches deixados por outros apps que já
@@ -12,6 +12,30 @@ self.addEventListener('activate', (event) =>
       .then(() => self.clients.claim()),
   ),
 );
+
+// Notificação mandada pelo servidor (Web Push)
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: event.data?.text() };
+  }
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Painel aberto na tela: o aviso já aparece na própria página
+      if (clients.some((c) => c.visibilityState === 'visible')) return;
+      return self.registration.showNotification(data.title || 'Painel do futebol', {
+        body: data.body,
+        icon: data.icon || 'icone.svg',
+        badge: 'icone.svg',
+        tag: data.tag,
+        renotify: true,
+        data: { url: data.url || '/' },
+      });
+    }),
+  );
+});
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

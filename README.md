@@ -127,6 +127,44 @@ dia) e fica salva em `data/cache/` por 24 horas. Confira no painel da API-Footba
 quais temporadas o seu plano libera; se a temporada não estiver disponível, a
 tela mostra o erro que a API devolveu.
 
+## Colocar na internet (e receber gol com o celular bloqueado)
+
+Rodando no computador, o painel só abre no Wi-Fi de casa e o celular só avisa de
+gol com o painel aberto. Hospedado com HTTPS, ele abre em qualquer lugar, vira
+um app na tela de início e manda notificação de gol mesmo com o celular bloqueado.
+
+O jeito mais simples é o [Render](https://render.com) (tem plano grátis):
+
+1. Gere as chaves das notificações (uma vez só) e guarde as duas linhas:
+   ```bash
+   npm run chaves-push
+   ```
+2. Crie uma conta no Render e entre com o GitHub.
+3. Em **New → Blueprint**, escolha este repositório. O Render lê o `render.yaml`
+   e pede os valores secretos:
+   - `FOOTBALL_DATA_TOKEN`: o mesmo token do `.env`
+   - `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`: as duas linhas do passo 1
+   - `VAPID_SUBJECT`: `mailto:` + o seu e-mail
+   - `APIFOOTBALL_KEY`: pode deixar em branco
+4. Espere o deploy terminar e abra o endereço `https://...onrender.com`.
+5. **O plano grátis "dorme" depois de 15 minutos sem visita** (e aí não vê os
+   gols). Para ele ficar sempre acordado, crie um alarme grátis no
+   [cron-job.org](https://cron-job.org) (ou UptimeRobot) que abre
+   `https://SEU-ENDERECO.onrender.com/api/health` a cada 10 minutos.
+6. No celular, abra o endereço, toque no sino, ligue os alertas e a
+   **notificação do sistema**, e escolha os times.
+   - **Android (Chrome):** pronto.
+   - **iPhone:** primeiro toque em Compartilhar → **Adicionar à Tela de Início**,
+     abra o painel pelo ícone novo e só então ligue a notificação (o iOS só
+     permite notificação para sites adicionados à tela de início).
+
+Cada novo `git push` na `main` atualiza o painel sozinho. A memória do servidor
+grátis se apaga a cada atualização; o painel busca tudo de novo, e cada celular
+se inscreve outra vez sozinho na próxima vez que abrir o painel.
+
+Para outras hospedagens que rodam contêiner (Fly.io, Railway, Koyeb), use o
+`Dockerfile` e as mesmas variáveis.
+
 ## Assistir aos jogos
 
 O botão **📺 Assistir** abre o link definido em `WATCH_URL` (por padrão, o

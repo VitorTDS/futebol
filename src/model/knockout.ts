@@ -105,7 +105,15 @@ function toLeg(m: Match): Leg {
  * preenchidas pelos vencedores da fase anterior, na ordem dos confrontos
  * (1º x 2º, 3º x 4º...), e a final é em campo neutro.
  */
-export function simulateKnockout(bracket: Map<string, Tie[]>, model: FittedModel, teamIds: number[], runs: number, rng: Rng): KnockoutOutlook {
+export function simulateKnockout(
+  bracket: Map<string, Tie[]>,
+  model: FittedModel,
+  teamIds: number[],
+  runs: number,
+  rng: Rng,
+  /** "E se": quem passa em cada confronto (`${fase}:${índice}` → id do time) */
+  forced?: Map<string, number>,
+): KnockoutOutlook {
   const { tie } = createTieSimulator(model, teamIds);
   // As fases vêm na ordem em que buildBracket montou o chaveamento
   const stages = [...bracket.keys()];
@@ -148,6 +156,10 @@ export function simulateKnockout(bracket: Map<string, Tie[]>, model: FittedModel
           // Final ainda sem os dois times: jogo único em campo neutro
           w = tie([{ home: a, away: b }], true, rng).winner as number;
         }
+        // Palpite do "e se": o sorteio acontece do mesmo jeito (para as outras contas
+        // usarem os mesmos números do cenário-base), mas quem passa é o escolhido
+        const pick = forced?.get(`${stage}:${i}`);
+        if (!t.winner && (pick === a || pick === b)) w = pick;
         if (w === a) advance.set(`${stage}:${i}`, (advance.get(`${stage}:${i}`) ?? 0) + 1);
         if (stage === 'FINAL') podium.set(`${w}>${w === a ? b : a}`, (podium.get(`${w}>${w === a ? b : a}`) ?? 0) + 1);
         next.push(w);

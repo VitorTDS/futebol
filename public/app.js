@@ -25,21 +25,34 @@ const CUP_INFO = {
     model: 'da Libertadores',
     legend: { lib: 'Oitavas de final', sul: 'Sul-Americana' },
   },
-  cdb: { name: 'Copa do Brasil', title: 'Copa do Brasil 2026', slogan: 'vaga direta na Libertadores', pages: ['chave', 'jogos'], model: 'da Copa do Brasil e do Brasileirão' },
+  cdb: {
+    name: 'Copa do Brasil',
+    title: 'Copa do Brasil 2026',
+    slogan: 'vaga direta na Libertadores',
+    pages: ['chave', 'jogos', 'gols'],
+    model: 'da Copa do Brasil e do Brasileirão',
+    scorersNote: 'Gols contados a partir da quarta fase: a ESPN não tem a lista de quem marcou nas três primeiras fases.',
+  },
   sula: {
     name: 'Sul-Americana',
     title: 'CONMEBOL Sul-Americana 2026',
     slogan: 'o campeão vai à Libertadores',
-    pages: ['chave', 'jogos', 'grupos'],
+    pages: ['chave', 'jogos', 'grupos', 'gols'],
     model: 'da Sul-Americana, do Brasileirão e da Libertadores',
     legend: { lib: 'Mata-mata (1º direto às oitavas, 2º nos playoffs)', sul: null },
   },
 };
 const isCup = () => state.comp in CUP_INFO;
+// "E se" nas copas: quem passa em cada confronto ({ lib: { 'SEMI_FINALS:0': id } }).
+// Vale no chaveamento de cada copa e nas vagas do "e se" do Brasileirão.
+// (preenchido logo depois de `store` existir, mais abaixo)
+const saveCupPicks = () => store.set('copas.picks', state.cupPicks);
+const hasPicks = (comp) => Object.keys(state.cupPicks[comp] ?? {}).length > 0;
 const cupApi = (p) => `/api/${state.comp}${p}`;
 // Na Libertadores, todo clube (brasileiro ou não) tem a sua página
-const teamHref = (id) => (isCup() ? `#/${state.comp}/time/${id}` : `#/time/${id}`);
-const jogoHref = (id) => (isCup() ? `#/${state.comp}/jogo/${id}` : `#/jogo/${id}`);
+// `comp` muda o campeonato do link (ex.: jogo de copa na página do time no Brasileirão)
+const teamHref = (id, comp = state.comp) => (comp in CUP_INFO ? `#/${comp}/time/${id}` : `#/time/${id}`);
+const jogoHref = (id, comp = state.comp) => (comp in CUP_INFO ? `#/${comp}/jogo/${id}` : `#/jogo/${id}`);
 
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -59,13 +72,13 @@ function pct(p) {
   return (p * 100).toLocaleString('pt-BR', { maximumFractionDigits: p < 0.1 ? 1 : 0 }) + '%';
 }
 
-function teamHtml(team, { short = false } = {}) {
+function teamHtml(team, { short = false, comp } = {}) {
   const icon = team.crest
     ? `<img class="crest" src="${escapeHtml(team.crest)}" alt="" loading="lazy" />`
     : `<span class="badge">${escapeHtml(team.tla)}</span>`;
   const name = `${icon}<span>${escapeHtml(short ? team.tla : team.shortName)}</span>`;
   if (team.tbd) return `<span class="team">${name}</span>`;
-  return `<a class="team" href="${teamHref(team.id)}">${name}</a>`;
+  return `<a class="team" href="${teamHref(team.id, comp)}">${name}</a>`;
 }
 
 function probCell(p, color) {
@@ -362,11 +375,14 @@ function matchCard(m, watchUrl) {
       </div>`;
   }
 
-  return `<article class="match ${live ? 'live' : ''}" data-jogo="${m.id}">
-    <div class="match-head"><span>${status}</span></div>
-    <div class="scoreline">${teamHtml(m.home)}${score}${teamHtml(m.away)}</div>
+  // Jogo de outro campeonato (ex.: copa na página do time): diz qual e aponta para lá
+  const comp = m.comp && m.comp !== state.comp ? m.comp : undefined;
+  const compLabel = comp ? `<span class="comp-tag">${escapeHtml(CUP_INFO[comp]?.name ?? 'Brasileirão')}${m.stageLabel ? ` · ${escapeHtml(m.stageLabel)}` : ''}</span>` : '';
+  return `<article class="match ${live ? 'live' : ''}" data-jogo="${m.id}"${comp ? ` data-comp="${comp}"` : ''}>
+    <div class="match-head"><span>${status}</span>${compLabel}</div>
+    <div class="scoreline">${teamHtml(m.home, { comp })}${score}${teamHtml(m.away, { comp })}</div>
     ${prediction}
-    <a class="ver-jogo" href="${jogoHref(m.id)}">Ver detalhes do jogo ›</a>
+    <a class="ver-jogo" href="${jogoHref(m.id, comp)}">Ver detalhes do jogo ›</a>
   </article>`;
 }
 
@@ -384,22 +400,53 @@ async function loadMatches() {
 
 // ---------- Evolução ----------
 
+// Clubes com a mesma cor (seis são pretos, vários vermelhos): cada um ganha um tipo de linha
+const LINE_DASHES = [[], [8, 4], [2, 4], [12, 4, 2, 4], [4, 4], [1, 3], [16, 6]];
+
+/** Escudo do clube, para desenhar na ponta da linha do gráfico */
+function crestPoint(team, onLoad) {
+  if (!team.crest) return 'circle';
+  const img = new Image(20, 20);
+  img.onload = onLoad;
+  img.src = team.crest;
+  return img;
+}
+
 async function loadEvolution() {
   const data = await api('/api/evolution');
   const n = data.teams.length;
-  const datasets = data.teams.map((t, i) => ({
-    label: t.team.shortName,
-    data: t.positions,
-    borderColor: `hsl(${(i * 360) / n}, 70%, 40%)`,
-    backgroundColor: `hsl(${(i * 360) / n}, 70%, 40%)`,
-    hidden: i >= 6,
-    tension: 0.25,
-    pointRadius: 2,
-  }));
+  const sameColor = new Map();
+  const datasets = data.teams.map((t, i) => {
+    const color = t.color ?? `hsl(${(i * 360) / n}, 70%, 40%)`;
+    const k = sameColor.get(color) ?? 0;
+    sameColor.set(color, k + 1);
+    // Último ponto com dado: é onde fica o escudo
+    const last = t.positions.findLastIndex((p) => p != null);
+    const crest = crestPoint(t.team, () => state.evolutionChart?.update('none'));
+    return {
+      label: t.team.shortName,
+      data: t.positions,
+      borderColor: color,
+      backgroundColor: color,
+      borderDash: LINE_DASHES[k % LINE_DASHES.length],
+      borderWidth: 2.5,
+      hidden: i >= 6,
+      tension: 0.25,
+      pointStyle: (ctx) => (ctx.dataIndex === last ? crest : 'circle'),
+      pointRadius: (ctx) => (ctx.dataIndex === last ? 10 : 2),
+      pointHoverRadius: (ctx) => (ctx.dataIndex === last ? 12 : 4),
+    };
+  });
 
   if (state.evolutionChart) {
     state.evolutionChart.data.labels = data.matchdays;
-    state.evolutionChart.data.datasets.forEach((ds, i) => (ds.data = datasets[i]?.data ?? []));
+    // Atualiza dados e estilo de cada time (pelo nome: a ordem da tabela muda), mas
+    // mantém quais times estão visíveis
+    const byLabel = new Map(datasets.map((d) => [d.label, d]));
+    state.evolutionChart.data.datasets.forEach((ds) => {
+      const next = byLabel.get(ds.label);
+      if (next) Object.assign(ds, { ...next, hidden: ds.hidden });
+    });
     state.evolutionChart.update();
     return;
   }
@@ -414,7 +461,8 @@ async function loadEvolution() {
         y: { reverse: true, min: 1, max: n, ticks: { stepSize: 1 }, title: { display: true, text: 'Posição' } },
         x: { title: { display: true, text: 'Rodada' } },
       },
-      plugins: { legend: { position: 'right' } },
+      // Legenda como amostra da linha (cor e tracejado de cada time)
+      plugins: { legend: { position: 'right', labels: { boxWidth: 28, boxHeight: 3 } } },
     },
   });
 }
@@ -981,6 +1029,29 @@ function renderTeamResults(d) {
   </table></div>`;
 }
 
+// O mesmo time nas copas que ele joga: situação, chance de título e link para a campanha
+function renderTeamCups(d) {
+  $('#team-cups-box').hidden = !d.cups.length;
+  $('#team-cups').innerHTML = d.cups
+    .map((c) => {
+      const situation = c.won
+        ? 'Campeão'
+        : c.eliminated
+          ? `Eliminado: ${c.eliminated.label.toLowerCase()}${c.eliminated.sulamericana ? ' (foi para a Sul-Americana)' : ''}`
+          : c.now?.opponent
+            ? `${c.now.label} contra o ${escapeHtml(c.now.opponent.shortName)}${c.now.advance != null ? ` · ${pct(c.now.advance)} de chance de passar` : ''}`
+            : c.now
+              ? `${c.now.label} em disputa`
+              : 'Na disputa';
+      return `<a class="copa-time ${c.eliminated ? 'fora' : ''}" data-copa="${c.comp}" href="${teamHref(d.team.id, c.comp)}">
+        <small>${escapeHtml(c.name)}</small>
+        <b>${c.eliminated ? '—' : pct(c.champion)}</b>
+        <span>${c.eliminated ? situation : `de chance de título · ${situation}`}</span>
+      </a>`;
+    })
+    .join('');
+}
+
 async function loadTeam() {
   const d = await api(`/api/teams/${state.teamId}`);
   document.title = `${d.team.shortName} · Painel do Brasileirão`;
@@ -990,8 +1061,11 @@ async function loadTeam() {
   renderTeamCharts(d);
   renderTeamSplit(d);
   renderTeamStreaks(d);
-  $('#team-upcoming').innerHTML = d.upcoming.length
-    ? d.upcoming.map((m) => matchCard(m, d.watchUrl)).join('')
+  renderTeamCups(d);
+  // Próximos jogos de todas as competições, por data
+  const upcoming = [...d.upcoming, ...d.cups.flatMap((c) => c.upcoming)].sort((x, y) => x.utcDate.localeCompare(y.utcDate));
+  $('#team-upcoming').innerHTML = upcoming.length
+    ? upcoming.map((m) => matchCard(m, d.watchUrl)).join('')
     : '<div class="empty">Não há mais jogos no campeonato.</div>';
   renderTeamResults(d);
 }
@@ -1040,7 +1114,7 @@ function renderScoutStatus(status, targetSel) {
   }
   el.innerHTML =
     status.source === 'jogadores de exemplo'
-      ? '<div class="banner">Jogadores de exemplo (números sorteados). Coloque sua chave da API-Football em <code>APIFOOTBALL_KEY</code> no arquivo <code>.env</code> para usar os dados reais.</div>'
+      ? '<div class="banner">Jogadores de exemplo (números sorteados). Para os dados reais, crie uma conta na <a href="https://dashboard.api-football.com/register" target="_blank" rel="noopener">API-Football</a> e coloque a chave em <code>APIFOOTBALL_KEY</code> (no arquivo <code>.env</code> ou nas variáveis da hospedagem). Confira no painel deles se o seu plano libera a temporada atual: o plano grátis costuma liberar só temporadas antigas.</div>'
       : '';
   return true;
 }
@@ -1635,9 +1709,12 @@ async function libMeta() {
 }
 
 // Linha de um time dentro do cartão do confronto
-function tieTeam(t, goals, won, chance) {
+function tieTeam(t, goals, won, chance, tieId) {
   if (!t) return `<div class="tt tbd"><span class="badge">?</span><span>A definir</span></div>`;
-  return `<div class="tt ${won ? 'passou' : ''}">${crestImg(t)}<a href="${teamHref(t.id)}">${escapeHtml(t.shortName)}</a>
+  // Confronto em aberto: tocar no time escolhe quem passa ("e se")
+  const pick = tieId ? ` data-tie="${tieId}" data-team="${t.id}" role="button" title="E se o ${escapeHtml(t.shortName)} passar?"` : '';
+  const chosen = tieId && state.cupPicks[state.comp]?.[tieId] === t.id;
+  return `<div class="tt ${won ? 'passou' : ''} ${chosen ? 'escolhido' : ''}"${pick}>${crestImg(t)}<a href="${teamHref(t.id)}">${escapeHtml(t.shortName)}</a>
     ${chance != null ? `<small class="chance-t">${pct(chance)}</small>` : ''}<b>${goals ?? ''}</b></div>`;
 }
 
@@ -1661,29 +1738,42 @@ function tieCard(t, champions) {
           .join('')}</div>`
       : '';
   const played = t.legs.some((l) => l.status === 'FINISHED' || l.status === 'LIVE');
-  return `<div class="tie ${t.winner ? 'decidido' : ''}">
-    ${tieTeam(a, played && a ? t.aggregate[0] : null, t.winner === a?.id, t.advance)}
-    ${tieTeam(b, played && b ? t.aggregate[1] : null, t.winner === b?.id, t.advance != null ? 1 - t.advance : null)}
+  const open = !t.winner && a && b ? t.id : null;
+  return `<div class="tie ${t.winner ? 'decidido' : ''} ${open ? 'aberto' : ''}">
+    ${tieTeam(a, played && a ? t.aggregate[0] : null, t.winner === a?.id, t.advance, open)}
+    ${tieTeam(b, played && b ? t.aggregate[1] : null, t.winner === b?.id, t.advance != null ? 1 - t.advance : null, open)}
     ${finalists}
     <div class="pernas">${legs}</div>
   </div>`;
 }
 
 async function loadLibBracket() {
+  const comp = state.comp;
   const o = await libMeta();
-  $('#lib-campeao').innerHTML = `<div class="corrida-card">${o.champions
+  // Com palpites, as chances vêm do "e se" (e mostram quanto era antes)
+  let champions = o.champions;
+  if (hasPicks(comp)) {
+    const w = await postJson(cupApi('/whatif'), { picks: state.cupPicks[comp] });
+    // O servidor devolve só os palpites que ainda valem (confronto decidido sai)
+    state.cupPicks[comp] = Object.fromEntries(Object.entries(w.picks).map(([k, v]) => [k, Number(v)]));
+    saveCupPicks();
+    champions = w.champions.filter((c) => c.champion > 0 || c.base > 0);
+  }
+  const picked = hasPicks(comp);
+  $('#lib-campeao').innerHTML = `<div class="corrida-card">${champions
     .map(
       (c) => `<div class="linha">${crestImg(c.team)}
       <div class="trilho" style="--c:var(--amarelo)"><div data-w="${c.champion}"></div><span><a href="${teamHref(c.team.id)}">${escapeHtml(c.team.shortName)}</a></span></div>
-      <b>${pct(c.champion)}</b></div>`,
+      <b>${pct(c.champion)}${picked && Math.abs(c.champion - c.base) >= 0.005 ? `<span class="antes">antes ${pct(c.base)}</span>` : ''}</b></div>`,
     )
-    .join('')}</div>`;
+    .join('')}</div>
+    ${picked ? '<p class="muted">Com os seus palpites (em amarelo no chaveamento). <button class="small-btn" id="cup-picks-clear">Desfazer palpites</button></p>' : ''}`;
   $('#lib-bracket').innerHTML = o.stages
     .map((s) => `<div class="fase-col"><h3>${escapeHtml(s.label)}</h3><div class="fase-ties">${s.ties.map((t) => tieCard(t, s.key === 'FINAL' ? o.champions : null)).join('')}</div></div>`)
     .join('');
   $('#cup-slogan').textContent = CUP_INFO[state.comp].slogan;
   const jogos = CUP_INFO[state.comp].model;
-  $('#lib-nota').textContent = `Chances calculadas com ${o.simulations.toLocaleString('pt-BR')} simulações do mata-mata, usando o modelo ajustado com os jogos ${jogos}. A final é em jogo único, em campo neutro.`;
+  $('#lib-nota').textContent = `Chances calculadas com ${o.simulations.toLocaleString('pt-BR')} simulações do mata-mata, usando o modelo ajustado com os jogos ${jogos}. A final é em jogo único, em campo neutro. E se…? Toque num time de um confronto em aberto para ver como ficam as chances se ele passar.`;
   growBars($('#lib-chave'));
 }
 
@@ -1724,8 +1814,31 @@ async function loadLibGroups() {
 async function loadLibScorers() {
   const data = await api(cupApi('/scorers'));
   libMeta().catch(() => {});
+  const info = CUP_INFO[state.comp];
+  $('#gols-nota').textContent = `da ${info.name}`;
+  $('#gols-aviso').hidden = !info.scorersNote;
+  $('#gols-aviso').textContent = info.scorersNote ?? '';
   $('#lib-scorers').innerHTML = scorersTable(data.scorers);
 }
+
+// Toque num time de confronto em aberto: escolhe (ou desfaz) quem passa
+$('#lib-bracket').addEventListener('click', (e) => {
+  const row = e.target.closest('.tt[data-tie]');
+  if (!row || e.target.closest('a')) return;
+  const picks = (state.cupPicks[state.comp] ??= {});
+  const team = Number(row.dataset.team);
+  if (picks[row.dataset.tie] === team) delete picks[row.dataset.tie];
+  else picks[row.dataset.tie] = team;
+  saveCupPicks();
+  refresh();
+});
+
+$('#lib-campeao').addEventListener('click', (e) => {
+  if (!e.target.closest('#cup-picks-clear')) return;
+  state.cupPicks[state.comp] = {};
+  saveCupPicks();
+  refresh();
+});
 
 $('#lib-fases').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-stage]');
@@ -1763,6 +1876,12 @@ async function loadLibTeam() {
   $('#lib-time-back').href = `#/${state.comp}/${CUP_INFO[state.comp].pages.includes('grupos') ? 'grupos' : 'chave'}`;
   $('#lib-time-back').textContent = `← ${cup}`;
   $('#lib-team-caminho').textContent = `Caminho na ${cup}`;
+  // Clube da Série A: link para a página completa dele (Brasileirão e todas as copas)
+  $('#lib-time-bsa').hidden = true;
+  api('/api/overview').then((o) => {
+    $('#lib-time-bsa').hidden = !o.standings.some((r) => r.team.id === t.id);
+    $('#lib-time-bsa').href = `#/time/${t.id}`;
+  }, () => {});
   const out = d.journey.find((s) => s.result === 'eliminado');
   const won = d.journey.find((s) => s.stage === 'FINAL' && s.result === 'passou');
   const situation = won
@@ -1849,6 +1968,8 @@ const store = {
   },
 };
 
+state.cupPicks = { lib: {}, cdb: {}, sula: {}, ...store.get('copas.picks', {}) };
+
 state.ese = { data: null, matchday: null, picks: store.get('ese.picks', {}), result: null, timer: null, seq: 0 };
 
 const PICK_LABEL = { H: 'Casa', D: 'Empate', A: 'Fora' };
@@ -1870,8 +1991,51 @@ async function loadWhatif() {
     select.value = String(store.get('meuTime', '') ?? '');
   }
   renderWhatifMatches();
-  await recalcWhatif();
+  await Promise.all([recalcWhatif(), loadWhatifCups()]);
 }
+
+// Confrontos em aberto das copas que dão vaga: quem passar muda as vagas do Brasileirão
+async function loadWhatifCups() {
+  const lists = await Promise.all(
+    Object.keys(CUP_INFO).map((comp) =>
+      api(`/api/${comp}/overview`).then(
+        (o) => o.stages.flatMap((s) => s.ties.filter((t) => !t.winner && t.teams[0] && t.teams[1]).map((t) => ({ ...t, comp, stage: s.label }))),
+        () => [],
+      ),
+    ),
+  );
+  state.ese.cupTies = lists.flat();
+  renderWhatifCups();
+}
+
+function renderWhatifCups() {
+  const ties = state.ese.cupTies ?? [];
+  $('#ese-copas-box').hidden = !ties.length;
+  $('#ese-copas').innerHTML = ties
+    .map((t) => {
+      const pick = state.cupPicks[t.comp]?.[t.id];
+      const btn = (team, chance) =>
+        `<button data-comp="${t.comp}" data-tie="${t.id}" data-team="${team.id}" class="${pick === team.id ? 'on' : ''}" aria-pressed="${pick === team.id}">${crestImg(team)}${escapeHtml(team.shortName)}${chance != null ? `<small>${pct(chance)}</small>` : ''}</button>`;
+      return `<div class="ese-jogo ${pick ? 'escolhido' : ''}">
+        <span class="ese-copa-nome">${escapeHtml(CUP_INFO[t.comp].name)} · ${escapeHtml(t.stage)}</span>
+        <div class="seg2">${btn(t.teams[0], t.advance)}${btn(t.teams[1], t.advance != null ? 1 - t.advance : null)}</div>
+      </div>`;
+    })
+    .join('');
+}
+
+$('#ese-copas').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tie]');
+  if (!b) return;
+  const picks = (state.cupPicks[b.dataset.comp] ??= {});
+  const team = Number(b.dataset.team);
+  if (picks[b.dataset.tie] === team) delete picks[b.dataset.tie];
+  else picks[b.dataset.tie] = team;
+  saveCupPicks();
+  renderWhatifCups();
+  renderWhatifMatches();
+  scheduleWhatif();
+});
 
 function renderWhatifMatches() {
   const ese = state.ese;
@@ -1906,7 +2070,7 @@ function renderWhatifMatches() {
     })
     .join('');
 
-  const n = Object.keys(ese.picks).length;
+  const n = Object.keys(ese.picks).length + Object.keys(CUP_INFO).reduce((s, c) => s + Object.keys(state.cupPicks[c] ?? {}).length, 0);
   $('#ese-count').textContent = n ? `${n} jogo${n > 1 ? 's' : ''} escolhido${n > 1 ? 's' : ''}` : 'Nenhum jogo escolhido';
   $('#ese-clear').hidden = !n;
 }
@@ -1925,7 +2089,7 @@ async function recalcWhatif() {
   const res = await fetch('/api/whatif', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ picks: ese.picks }),
+    body: JSON.stringify({ picks: ese.picks, cupPicks: state.cupPicks }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
@@ -1994,6 +2158,9 @@ $('#ese-matches').addEventListener('click', (e) => {
 $('#ese-clear').addEventListener('click', () => {
   state.ese.picks = {};
   store.set('ese.picks', {});
+  state.cupPicks = { lib: {}, cdb: {}, sula: {} };
+  saveCupPicks();
+  renderWhatifCups();
   renderWhatifMatches();
   scheduleWhatif();
 });
@@ -2028,12 +2195,69 @@ const canVibrate = 'vibrate' in navigator;
 const canNotify = window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator;
 
 if (canNotify) {
-  navigator.serviceWorker.register('sw.js').then((reg) => (swRegistration = reg), () => {});
+  navigator.serviceWorker.register('sw.js').then(
+    (reg) => {
+      swRegistration = reg;
+      // Reenvia a inscrição a cada visita: se o servidor reiniciou e perdeu a lista, recupera
+      syncPush();
+    },
+    () => {},
+  );
 }
 
 function saveAlerts() {
   store.set('alertas', alerts);
   $('.bell-dot').hidden = !alerts.on;
+  clearTimeout(state.pushTimer);
+  state.pushTimer = setTimeout(syncPush, 500);
+}
+
+// ---------- Notificação com o celular bloqueado (Web Push) ----------
+
+// Com a inscrição ativa, quem manda a notificação é o servidor (funciona até com o
+// celular bloqueado); a página só mostra o aviso na tela, para não avisar duas vezes.
+const canPush = canNotify && 'PushManager' in window;
+let pushOn = false;
+
+/** Chave pública em base64url → bytes, no formato que o navegador pede */
+function keyBytes(base64) {
+  const b64 = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`Erro ${res.status}`);
+  return res.json();
+}
+
+async function syncPush() {
+  if (!canPush || !swRegistration) return;
+  try {
+    const want = alerts.on && alerts.notify && Notification.permission === 'granted';
+    let sub = await swRegistration.pushManager.getSubscription();
+    if (!want) {
+      if (sub) {
+        await postJson('/api/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe();
+      }
+      pushOn = false;
+      return;
+    }
+    const { publicKey } = await api('/api/push/key');
+    // O servidor trocou de chave (ex.: hospedagem nova): refaz a inscrição
+    if (sub && store.get('pushKey', null) !== publicKey) {
+      await sub.unsubscribe();
+      sub = null;
+    }
+    sub ??= await swRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+    store.set('pushKey', publicKey);
+    await postJson('/api/push/subscribe', { subscription: sub.toJSON(), prefs: { all: alerts.all, teams: alerts.teams, kickoff: alerts.kickoff } });
+    pushOn = true;
+  } catch (err) {
+    console.warn('Notificação com a tela bloqueada indisponível:', err.message);
+    pushOn = false;
+  }
 }
 
 function follows(match) {
@@ -2105,7 +2329,7 @@ function fireAlert(ev) {
   showToast(ev);
   if (alerts.sound) whistle(ev.type);
   if (alerts.vibrate && canVibrate) navigator.vibrate(ev.type === 'goal' ? [300, 100, 300, 100, 700] : [200]);
-  if (alerts.notify && canNotify && Notification.permission === 'granted' && document.hidden && swRegistration) {
+  if (alerts.notify && canNotify && Notification.permission === 'granted' && document.hidden && swRegistration && !pushOn) {
     const { title, body, team } = alertText(ev);
     swRegistration.showNotification(title, { body, icon: team.crest, tag: `jogo-${ev.match.id}`, renotify: true, data: { url: '/#/jogos' } });
   }
@@ -2139,10 +2363,14 @@ function renderAlertDialog(teams) {
   $('#al-vibrar-row').hidden = !canVibrate;
   $('#al-notif').disabled = !canNotify;
   const info = $('#al-notif-info');
-  info.hidden = canNotify && Notification.permission !== 'denied';
+  info.hidden = false;
   info.textContent = !canNotify
     ? 'Notificação do sistema não está disponível neste endereço (precisa de https). O aviso na tela, o som e a vibração funcionam.'
-    : 'As notificações foram bloqueadas neste navegador. Libere nas configurações do site.';
+    : Notification.permission === 'denied'
+      ? 'As notificações foram bloqueadas neste navegador. Libere nas configurações do site.'
+      : canPush
+        ? 'Com a notificação ligada, o gol chega mesmo com o celular bloqueado. No iPhone, primeiro adicione o painel à tela de início (Compartilhar → Adicionar à Tela de Início).'
+        : 'Este navegador só mostra a notificação com o painel aberto.';
   $('#al-times').innerHTML = teams
     .map(
       (t) => `<button type="button" class="al-time ${alerts.teams.includes(t.id) ? 'on' : ''}" data-id="${t.id}" aria-pressed="${alerts.teams.includes(t.id)}">
@@ -2225,7 +2453,20 @@ const loaders = {
   ese: loadWhatif,
 };
 
+// Fonte fora do ar: o servidor segue com os últimos placares, e a página diz de quando são
+async function checkSource() {
+  const s = (await api('/api/status'))[state.comp];
+  const el = $('#fonte-aviso');
+  el.hidden = !s || s.ok;
+  if (el.hidden) return;
+  const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  el.textContent = s.lastOk
+    ? `⚠ A fonte dos dados está fora do ar desde ${hora(s.failingSince)}. Mostrando os placares de ${hora(s.lastOk)}.`
+    : '⚠ A fonte dos dados está fora do ar.';
+}
+
 async function refresh() {
+  checkSource().catch(() => {});
   try {
     const hero = loadHero();
     if (state.comp === 'bsa' && !state.metaSet && state.tab !== 'tabela') api('/api/overview').then(setMeta, () => {});
@@ -2315,7 +2556,7 @@ window.addEventListener('hashchange', applyRoute);
 document.addEventListener('click', (e) => {
   const card = e.target.closest('[data-jogo]');
   if (!card || e.target.closest('a, button')) return;
-  location.hash = jogoHref(card.dataset.jogo);
+  location.hash = jogoHref(card.dataset.jogo, card.dataset.comp);
 });
 
 $('#prev-round').addEventListener('click', () => {
@@ -2340,10 +2581,26 @@ $('#history-next').addEventListener('click', () => {
 
 // O servidor avisa na hora quando um placar muda; o setInterval fica só de reserva.
 
+/** Alerta de gol de outro campeonato, sem recarregar a tela aberta */
+function checkOtherComp(comp) {
+  api(comp === 'bsa' ? '/api/matches' : `/api/${comp}/matches`).then((d) => checkAlerts(d.matches), () => {});
+}
+
 function connectLive() {
   if (!window.EventSource) return;
   const es = new EventSource('/api/stream');
-  es.addEventListener('update', () => refresh());
+  // O servidor acompanha os quatro campeonatos: atualiza a tela quando muda o que
+  // está aberto, e os outros só importam para os alertas de gol
+  es.addEventListener('update', (e) => {
+    let comp = null;
+    try {
+      comp = JSON.parse(e.data).comp;
+    } catch {
+      // aviso antigo, sem campeonato: atualiza
+    }
+    if (!comp || comp === state.comp) refresh();
+    else if (alerts.on) checkOtherComp(comp);
+  });
 }
 
 // No celular a página "dorme" em segundo plano: ao voltar, atualiza na hora.

@@ -1,0 +1,522 @@
+{
+ "events": [
+  {
+   "id": "401865388",
+   "date": "2026-04-15T00:00Z",
+   "season": {
+    "slug": "group-stage"
+   },
+   "status": {
+    "displayClock": "90'+9'",
+    "type": {
+     "state": "post",
+     "completed": true,
+     "name": "STATUS_FULL_TIME"
+    }
+   },
+   "competitions": [
+    {
+     "competitors": [
+      {
+       "id": "3454",
+       "homeAway": "home",
+       "score": "1",
+       "team": {
+        "id": "3454",
+        "displayName": "Vasco da Gama",
+        "shortDisplayName": "Vasco",
+        "abbreviation": "VAS",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/3454.png"
+       }
+      },
+      {
+       "id": "4138",
+       "homeAway": "away",
+       "score": "2",
+       "team": {
+        "id": "4138",
+        "displayName": "Audax Italiano",
+        "shortDisplayName": "Audax Italiano",
+        "abbreviation": "AUD",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/4138.png"
+       }
+      }
+     ],
+     "details": [
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "3454"
+       },
+       "athletesInvolved": [
+        {
+         "id": "379268",
+         "displayName": "JP"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "3454"
+       },
+       "athletesInvolved": [
+        {
+         "id": "379268",
+         "displayName": "JP"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "4138"
+       },
+       "athletesInvolved": [
+        {
+         "id": "265882",
+         "displayName": "Oliver Rojas"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "3454"
+       },
+       "athletesInvolved": [
+        {
+         "id": "257744",
+         "displayName": "Brenner"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "4138"
+       },
+       "athletesInvolved": [
+        {
+         "id": "238838",
+         "displayName": "Marco Collao Ramos"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "4138"
+       },
+       "athletesInvolved": [
+        {
+         "id": "271216",
+         "displayName": "Michael Fuentes"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "3454"
+       },
+       "athletesInvolved": [
+        {
+         "id": "330924",
+         "displayName": "Andrés Gómez"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "3454"
+       },
+       "athletesInvolved": [
+        {
+         "id": "235940",
+         "displayName": "Carlos Cuesta"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "3454"
+       },
+       "athletesInvolved": [
+        {
+         "id": "269924",
+         "displayName": "Hugo Moura"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": true,
+       "team": {
+        "id": "4138"
+       },
+       "athletesInvolved": [
+        {
+         "id": "233958",
+         "displayName": "Franco Troyansky"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "4138"
+       },
+       "athletesInvolved": [
+        {
+         "id": "308678",
+         "displayName": "Nicolás Aedo"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "4138"
+       },
+       "athletesInvolved": [
+        {
+         "id": "174464",
+         "displayName": "Marcelo Ortiz"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401843575",
+   "date": "2026-03-03T22:00Z",
+   "season": {
+    "slug": "first-stage"
+   },
+   "status": {
+    "displayClock": "97'",
+    "type": {
+     "state": "post",
+     "completed": true,
+     "name": "STATUS_FINAL_PEN"
+    }
+   },
+   "competitions": [
+    {
+     "competitors": [
+      {
+       "id": "20889",
+       "homeAway": "home",
+       "score": "0",
+       "shootoutScore": 3,
+       "team": {
+        "id": "20889",
+        "displayName": "Independiente Petrolero",
+        "shortDisplayName": "CI Petrolero",
+        "abbreviation": "CIP",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/20889.png"
+       }
+      },
+      {
+       "id": "9497",
+       "homeAway": "away",
+       "score": "0",
+       "shootoutScore": 2,
+       "team": {
+        "id": "9497",
+        "displayName": "Guabirá",
+        "shortDisplayName": "Guabirá",
+        "abbreviation": "GUA",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/9497.png"
+       }
+      }
+     ],
+     "details": [
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "130872",
+         "displayName": "Rudy Cardozo"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "9497"
+       },
+       "athletesInvolved": [
+        {
+         "id": "131493",
+         "displayName": "Carlos Añez"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "361143",
+         "displayName": "Marcelo Somoya"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "252004",
+         "displayName": "Saúl Torres"
+        }
+       ]
+      },
+      {
+       "scoringPlay": false,
+       "shootout": false,
+       "ownGoal": false,
+       "penaltyKick": false,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "206314",
+         "displayName": "Francisco Rodríguez"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": true,
+       "ownGoal": false,
+       "penaltyKick": true,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "92715",
+         "displayName": "Jonatan Cristaldo"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": true,
+       "ownGoal": false,
+       "penaltyKick": true,
+       "team": {
+        "id": "9497"
+       },
+       "athletesInvolved": [
+        {
+         "id": "269861",
+         "displayName": "Milton Maciel"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": true,
+       "ownGoal": false,
+       "penaltyKick": true,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "130629",
+         "displayName": "Gustavo Cristaldo"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": true,
+       "ownGoal": false,
+       "penaltyKick": true,
+       "team": {
+        "id": "9497"
+       },
+       "athletesInvolved": [
+        {
+         "id": "345609",
+         "displayName": "Roler Ferrufino"
+        }
+       ]
+      },
+      {
+       "scoringPlay": true,
+       "shootout": true,
+       "ownGoal": false,
+       "penaltyKick": true,
+       "team": {
+        "id": "20889"
+       },
+       "athletesInvolved": [
+        {
+         "id": "138955",
+         "displayName": "Diego Navarro"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401913957",
+   "date": "2026-10-21T00:30Z",
+   "season": {
+    "slug": "semifinals"
+   },
+   "status": {
+    "displayClock": "0'",
+    "type": {
+     "state": "pre",
+     "completed": false,
+     "name": "STATUS_SCHEDULED"
+    }
+   },
+   "competitions": [
+    {
+     "competitors": [
+      {
+       "id": "3454",
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "3454",
+        "displayName": "Vasco da Gama",
+        "shortDisplayName": "Vasco",
+        "abbreviation": "VAS",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/3454.png"
+       }
+      },
+      {
+       "id": "5",
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "5",
+        "displayName": "Boca Juniors",
+        "shortDisplayName": "Boca ",
+        "abbreviation": "CABJ",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/5.png"
+       }
+      }
+     ],
+     "details": []
+    }
+   ]
+  },
+  {
+   "id": "401913961",
+   "date": "2026-11-21T20:00Z",
+   "season": {
+    "slug": "final"
+   },
+   "status": {
+    "displayClock": "0'",
+    "type": {
+     "state": "pre",
+     "completed": false,
+     "name": "STATUS_SCHEDULED"
+    }
+   },
+   "competitions": [
+    {
+     "competitors": [
+      {
+       "id": "131556",
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "131556",
+        "displayName": "TBD Home",
+        "shortDisplayName": "TBD Home",
+        "abbreviation": "TBD Home",
+        "logo": ""
+       }
+      },
+      {
+       "id": "131554",
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "131554",
+        "displayName": "TBD Away",
+        "shortDisplayName": "TBD Away",
+        "abbreviation": "TBD Away",
+        "logo": ""
+       }
+      }
+     ],
+     "details": []
+    }
+   ]
+  }
+ ]
+}

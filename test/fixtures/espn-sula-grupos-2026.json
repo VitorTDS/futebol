@@ -1,0 +1,66 @@
+{
+ "children": [
+  {
+   "name": "Group E",
+   "standings": {
+    "entries": [
+     {
+      "team": {
+       "id": "15",
+       "displayName": "Racing Club"
+      }
+     },
+     {
+      "team": {
+       "id": "4811",
+       "displayName": "Caracas FC"
+      }
+     },
+     {
+      "team": {
+       "id": "6086",
+       "displayName": "Botafogo"
+      }
+     },
+     {
+      "team": {
+       "id": "20889",
+       "displayName": "Independiente Petrolero"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "Group G",
+   "standings": {
+    "entries": [
+     {
+      "team": {
+       "id": "2675",
+       "displayName": "Club Olimpia"
+      }
+     },
+     {
+      "team": {
+       "id": "3454",
+       "displayName": "Vasco da Gama"
+      }
+     },
+     {
+      "team": {
+       "id": "4138",
+       "displayName": "Audax Italiano"
+      }
+     },
+     {
+      "team": {
+       "id": "10060",
+       "displayName": "Barracas Central"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

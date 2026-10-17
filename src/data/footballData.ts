@@ -87,7 +87,8 @@ export function createFootballDataProvider(opts: {
     const url = new URL(BASE_URL + apiPath);
     if (season) url.searchParams.set('season', season);
 
-    const res = await fetch(url, { headers: { 'X-Auth-Token': opts.token } });
+    // Sem resposta em 15 s, desiste (senão a página fica esperando para sempre)
+    const res = await fetch(url, { headers: { 'X-Auth-Token': opts.token }, signal: AbortSignal.timeout(15_000) });
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`football-data.org respondeu ${res.status}: ${body.slice(0, 200)}`);

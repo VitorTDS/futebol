@@ -82,3 +82,22 @@ test('fases de outra copa (Copa do Brasil) entram na ordem dada', () => {
   const out = simulateKnockout(bracket, model, [1, 2, 3], 1000, mulberry32(3));
   assert.ok(Math.abs((out.champion.get(a.id) ?? 0) + (out.champion.get(c.id) ?? 0) - 1) < 1e-9);
 });
+
+test('"e se": quem foi escolhido passa sempre, e sem palpite dá o mesmo que o cenário-base', () => {
+  const matches = [
+    ko('SEMI_FINALS', match(1, a, b, [3, 0])),
+    ko('SEMI_FINALS', soon(match(2, b, a))),
+    ko('SEMI_FINALS', match(1, c, d, [0, 0])),
+    ko('SEMI_FINALS', soon(match(2, d, c))),
+    ko('FINAL', soon(match(3, tbd(-1), tbd(-2)))),
+  ];
+  const bracket = buildBracket(matches);
+  const base = simulateKnockout(bracket, model, [1, 2, 3, 4], 2000, mulberry32(9));
+  const same = simulateKnockout(bracket, model, [1, 2, 3, 4], 2000, mulberry32(9), new Map());
+  assert.deepEqual([...same.champion], [...base.champion]);
+  // b vira o 3 x 0 da ida
+  const out = simulateKnockout(bracket, model, [1, 2, 3, 4], 2000, mulberry32(9), new Map([['SEMI_FINALS:0', b.id]]));
+  assert.equal(out.advance.get('SEMI_FINALS:0') ?? 0, 0);
+  assert.equal(out.champion.get(a.id) ?? 0, 0);
+  assert.ok(Math.abs((out.reach.get('FINAL')!.get(b.id) ?? 0) - 1) < 1e-9);
+});

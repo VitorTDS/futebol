@@ -366,6 +366,28 @@ async function summary(league: EspnLeague, eventId: string, match: Match): Promi
   return data;
 }
 
+/**
+ * Cor de cada clube do Brasileirão (id da football-data → "#rrggbb"), para os
+ * gráficos. Cor muito clara (branco) não aparece no fundo claro: usa a segunda cor.
+ */
+export async function getTeamColors(): Promise<Map<number, string>> {
+  const data = await cached('espn-cores-bra.1', 24 * 3_600_000, () => get('bra.1', '/teams'));
+  const fromEspn = new Map(Object.entries(ESPN_TEAMS).map(([fd, espn]) => [espn, Number(fd)]));
+  const light = (hex: string) => {
+    const n = parseInt(hex, 16);
+    // Luminância aproximada (0 a 255)
+    return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 200;
+  };
+  const colors = new Map<number, string>();
+  for (const { team: t } of data.sports?.[0]?.leagues?.[0]?.teams ?? []) {
+    const id = fromEspn.get(String(t.id));
+    if (!id || !/^[0-9a-f]{6}$/i.test(t.color ?? '')) continue;
+    const main = light(t.color) && /^[0-9a-f]{6}$/i.test(t.alternateColor ?? '') && !light(t.alternateColor) ? t.alternateColor : t.color;
+    colors.set(id, `#${main.toLowerCase()}`);
+  }
+  return colors;
+}
+
 export async function getMatchCenter(match: Match, league: EspnLeague = 'bra.1'): Promise<MatchCenter | null> {
   const found = await findEspnEvent(match, league);
   if (!found) return null;

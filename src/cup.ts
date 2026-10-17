@@ -12,6 +12,7 @@ import { predictMatch, topScores, type FittedModel } from './model/prediction.ts
 import { mulberry32 } from './model/random.ts';
 import { computeStandings, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
 import { ratings, teamResults } from './model/teamProfile.ts';
+import { resilient } from './data/resilient.ts';
 import type { DataProvider, Match, Scorer, Team } from './types.ts';
 
 export interface CupOptions {
@@ -40,6 +41,8 @@ interface Analysis {
   model: FittedModel;
   bracket: Map<string, Tie[]>;
   knockout: KnockoutOutlook;
+  /** Times que o modelo conhece (para o "e se" refazer o mata-mata) */
+  modelTeamIds: number[];
   groups: { group: string; rows: StandingRow[] }[];
   currentStage: string;
   updatedAt: string;
@@ -73,7 +76,8 @@ export function createCup(o: CupOptions) {
   const STAGE_LABELS: Record<string, string> = { GROUP_STAGE: 'Fase de grupos', ...Object.fromEntries(o.stages) };
   const STAGE_ORDER = o.stageOrder;
   const GROUP_ZONES = o.groupZones ?? null;
-  const provider = o.provider;
+  // Se a fonte cair, segue com os últimos placares (e o painel avisa)
+  const provider = o.provider ? resilient(o.provider, o.name) : null;
 
   let last: { key: string; value: Analysis } | null = null;
   let previousSeason: Match[] | null = null;
@@ -116,7 +120,17 @@ export function createCup(o: CupOptions) {
       return { group: g.replace('GROUP_', ''), rows: computeStandings(teamsFrom(games), games) };
     });
 
-    const value: Analysis = { matches, teams, model, bracket, knockout, groups, currentStage: currentStage(matches), updatedAt: new Date().toISOString() };
+    const value: Analysis = {
+      matches,
+      teams,
+      model,
+      bracket,
+      knockout,
+      modelTeamIds: allTeams.map((t) => t.id),
+      groups,
+      currentStage: currentStage(matches),
+      updatedAt: new Date().toISOString(),
+    };
     last = { key, value };
     return value;
   }
@@ -127,16 +141,23 @@ export function createCup(o: CupOptions) {
    * Brasil; clube de outra divisão ocupa a vaga sem passar pela tabela).
    * Com `withRunnerUp`, cada desfecho é uma final (campeão e vice).
    */
-  async function outcomes(brazilIds: Set<number>, withRunnerUp = false): Promise<{ key: string; odds: { champion: Side; runnerUp?: Side; p: number }[] }> {
+  async function outcomes(
+    brazilIds: Set<number>,
+    withRunnerUp = false,
+    /** "E se": quem passa em cada confronto */
+    picks?: unknown,
+  ): Promise<{ key: string; odds: { champion: Side; runnerUp?: Side; p: number }[] }> {
     const a = await getAnalysis();
+    const forced = parsePicks(a, picks);
+    const outlook = forced.size ? whatifOutlook(a, forced) : a.knockout;
     const byId = new Map(a.teams.map((t) => [t.id, t]));
     const side = (id: number): Side => (brazilIds.has(id) ? id : (byId.get(id)?.name ?? `time ${id}`));
     const odds = withRunnerUp
-      ? [...a.knockout.podium].map(([k, p]) => {
+      ? [...outlook.podium].map(([k, p]) => {
           const [champion, runnerUp] = k.split('>').map(Number);
           return { champion: side(champion), runnerUp: side(runnerUp), p };
         })
-      : [...a.knockout.champion].filter(([, p]) => p > 0).map(([id, p]) => ({ champion: side(id), p }));
+      : [...outlook.champion].filter(([, p]) => p > 0).map(([id, p]) => ({ champion: side(id), p }));
     // Chave só com os resultados encerrados: um minuto de jogo ao vivo da copa não
     // obriga o Brasileirão a refazer tudo, só um resultado novo
     const key = a.matches
@@ -146,7 +167,115 @@ export function createCup(o: CupOptions) {
     return { key: `${o.key}:${key.length}:${hash(key)}`, odds };
   }
 
+  // ---------- "E se" da copa ----------
+
+  /** Palpites válidos: confronto em aberto, com os dois times definidos, e um deles escolhido */
+  function parsePicks(a: Analysis, raw: unknown): Map<string, number> {
+    const forced = new Map<string, number>();
+    if (!raw || typeof raw !== 'object') return forced;
+    for (const [tieId, teamId] of Object.entries(raw as Record<string, unknown>)) {
+      const [stage, i] = tieId.split(':');
+      const t = a.bracket.get(stage)?.[Number(i)];
+      if (t && !t.winner && t.teams.some((x) => x && x.id === Number(teamId))) forced.set(tieId, Number(teamId));
+    }
+    return forced;
+  }
+
+  // Mesmos sorteios no cenário-base e no "e se": a diferença vem só dos palpites
+  const WHATIF_RUNS = 4000;
+  const WHATIF_SEED = 2026;
+  let whatifBase: { analysis: Analysis; outlook: KnockoutOutlook } | null = null;
+  const whatifOutlook = (a: Analysis, forced: Map<string, number>) =>
+    simulateKnockout(a.bracket, a.model, a.modelTeamIds, WHATIF_RUNS, mulberry32(WHATIF_SEED), forced);
+  function baseOutlook(a: Analysis) {
+    if (whatifBase?.analysis !== a) whatifBase = { analysis: a, outlook: whatifOutlook(a, new Map()) };
+    return whatifBase.outlook;
+  }
+
+  /** Caminho de um time fase a fase: confronto, placar agregado e se passou, caiu ou a chance de passar */
+  function journeyOf(a: Analysis, id: number) {
+    const group = a.groups.find((g) => g.rows.some((r) => r.team.id === id)) ?? null;
+    // Pela data: a fonte às vezes deixa um jogo antigo como "agendado" (na Libertadores 2026, DIM × FLA de maio)
+    const groupDone = a.matches.filter((m) => m.stage === 'GROUP_STAGE').every((m) => isFinished(m) || Date.parse(m.utcDate) < Date.now());
+
+    const journey = [];
+    for (const stage of STAGE_ORDER) {
+      const label = STAGE_LABELS[stage];
+      if (stage === 'GROUP_STAGE') {
+        const row = group?.rows.find((r) => r.team.id === id);
+        if (!group || !row || !GROUP_ZONES) continue;
+        const result = !groupDone ? null : row.position <= GROUP_ZONES.libertadores ? 'passou' : 'eliminado';
+        journey.push({ stage, label, group: group.group, position: row.position, points: row.points, result, sulamericana: groupDone && row.position === GROUP_ZONES.sulamericana });
+        continue;
+      }
+      const ties = a.bracket.get(stage);
+      if (!ties) continue;
+      const i = ties.findIndex((t) => t.teams.some((x) => x?.id === id));
+      if (i < 0) {
+        // Fase futura: chance de chegar até ela
+        const reach = a.knockout.reach.get(stage)?.get(id) ?? 0;
+        if (reach > 0) journey.push({ stage, label, reach });
+        continue;
+      }
+      const t = ties[i];
+      const first = t.teams[0]?.id === id;
+      const adv = a.knockout.advance.get(`${stage}:${i}`);
+      journey.push({
+        stage,
+        label,
+        opponent: t.teams[first ? 1 : 0],
+        aggregate: first ? t.aggregate : [t.aggregate[1], t.aggregate[0]],
+        played: t.legs.some((l) => isFinished(l) || l.status === 'LIVE'),
+        result: t.winner ? (t.winner.id === id ? 'passou' : 'eliminado') : null,
+        advance: t.winner || adv == null ? null : first ? adv : 1 - adv,
+      });
+    }
+
+    return journey;
+  }
+
+  /** Resumo de um time nesta copa, para a página do time no Brasileirão (null se não joga a copa) */
+  async function teamSummary(id: number) {
+    const a = await getAnalysis();
+    const team = a.teams.find((t) => t.id === id);
+    if (!team) return null;
+    const journey = journeyOf(a, id);
+    const out = journey.find((s) => s.result === 'eliminado');
+    const won = journey.some((s) => s.stage === 'FINAL' && s.result === 'passou');
+    // Fase em disputa agora: confronto em aberto ou grupo ainda rolando
+    const now = journey.find((s) => s.result == null && !('reach' in s));
+    const upcoming = a.matches
+      .filter((m) => !isFinished(m) && !m.home.tbd && !m.away.tbd && (m.home.id === id || m.away.id === id))
+      .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
+      .slice(0, 2)
+      .map((m) => ({ ...m, comp: o.key, stageLabel: STAGE_LABELS[m.stage ?? ''] ?? '', prediction: predictMatch(modelFor(a, m), m) }));
+    return { comp: o.key, name: o.name, champion: a.knockout.champion.get(id) ?? 0, won, eliminated: out ? { label: out.label, sulamericana: !!out.sulamericana } : null, now: now ?? null, upcoming };
+  }
+
   const router = express.Router();
+
+  router.post(
+    '/whatif',
+    express.json({ limit: '8kb' }),
+    route(async (req, res) => {
+      const a = await getAnalysis();
+      const forced = parsePicks(a, req.body?.picks);
+      const base = baseOutlook(a);
+      const now = forced.size ? whatifOutlook(a, forced) : base;
+      const byId = new Map(a.teams.map((t) => [t.id, t]));
+      const ids = new Set([...base.champion.keys(), ...now.champion.keys()]);
+      const champions = [...ids]
+        .filter((id) => byId.has(id))
+        .map((id) => ({
+          team: byId.get(id)!,
+          champion: now.champion.get(id) ?? 0,
+          base: base.champion.get(id) ?? 0,
+          final: now.reach.get('FINAL')?.get(id) ?? 0,
+        }))
+        .sort((x, y) => y.champion - x.champion || y.base - x.base);
+      res.json({ runs: WHATIF_RUNS, picks: Object.fromEntries(forced), champions });
+    }),
+  );
 
   router.get(
     '/overview',
@@ -157,6 +286,7 @@ export function createCup(o: CupOptions) {
         key,
         label,
         ties: a.bracket.get(key)!.map((t, i) => ({
+        id: `${key}:${i}`,
           teams: t.teams,
           legs: t.legs.map((m) => ({ id: m.id, utcDate: m.utcDate, status: m.status, minute: m.minute, home: m.home, away: m.away, homeGoals: m.homeGoals, awayGoals: m.awayGoals, penalties: m.penalties })),
           aggregate: t.aggregate,
@@ -294,43 +424,7 @@ export function createCup(o: CupOptions) {
         return;
       }
       const group = a.groups.find((g) => g.rows.some((r) => r.team.id === id)) ?? null;
-      // Pela data: a fonte às vezes deixa um jogo antigo como "agendado" (na Libertadores 2026, DIM × FLA de maio)
-      const groupDone = a.matches.filter((m) => m.stage === 'GROUP_STAGE').every((m) => isFinished(m) || Date.parse(m.utcDate) < Date.now());
-
-      // Caminho fase a fase: confronto, placar agregado e se passou, caiu ou a chance de passar
-      const journey = [];
-      for (const stage of STAGE_ORDER) {
-        const label = STAGE_LABELS[stage];
-        if (stage === 'GROUP_STAGE') {
-          const row = group?.rows.find((r) => r.team.id === id);
-          if (!group || !row || !GROUP_ZONES) continue;
-          const result = !groupDone ? null : row.position <= GROUP_ZONES.libertadores ? 'passou' : 'eliminado';
-          journey.push({ stage, label, group: group.group, position: row.position, points: row.points, result, sulamericana: groupDone && row.position === GROUP_ZONES.sulamericana });
-          continue;
-        }
-        const ties = a.bracket.get(stage);
-        if (!ties) continue;
-        const i = ties.findIndex((t) => t.teams.some((x) => x?.id === id));
-        if (i < 0) {
-          // Fase futura: chance de chegar até ela
-          const reach = a.knockout.reach.get(stage)?.get(id) ?? 0;
-          if (reach > 0) journey.push({ stage, label, reach });
-          continue;
-        }
-        const t = ties[i];
-        const first = t.teams[0]?.id === id;
-        const adv = a.knockout.advance.get(`${stage}:${i}`);
-        journey.push({
-          stage,
-          label,
-          opponent: t.teams[first ? 1 : 0],
-          aggregate: first ? t.aggregate : [t.aggregate[1], t.aggregate[0]],
-          played: t.legs.some((l) => isFinished(l) || l.status === 'LIVE'),
-          result: t.winner ? (t.winner.id === id ? 'passou' : 'eliminado') : null,
-          advance: t.winner || adv == null ? null : first ? adv : 1 - adv,
-        });
-      }
-
+      const journey = journeyOf(a, id);
       const results = teamResults(id, a.matches);
       const sum = (f: (r: (typeof results)[number]) => number) => results.reduce((s, r) => s + f(r), 0);
       // Força pelo modelo, comparada com os outros times desta Libertadores
@@ -381,5 +475,11 @@ export function createCup(o: CupOptions) {
   /** Jogos da copa (para outras copas usarem no modelo) */
   const matches = async () => (await getAnalysis()).matches;
 
-  return { router, outcomes, matches };
+  /** Placares direto da fonte (para o ao vivo, sem refazer a análise) */
+  const liveMatches = async () => (provider ? provider.getMatches() : []);
+
+  /** Situação da fonte (null: copa sem fonte configurada) */
+  const health = () => provider?.health() ?? null;
+
+  return { router, outcomes, matches, liveMatches, teamSummary, health };
 }
