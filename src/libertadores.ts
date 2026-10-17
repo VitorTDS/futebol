@@ -10,8 +10,8 @@ import { buildBracket, KNOCKOUT_STAGES, simulateKnockout, type KnockoutOutlook, 
 import { predictMatch, topScores, type FittedModel } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { computeStandings, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
-import { teamResults } from './model/teamProfile.ts';
-import type { Match, Team } from './types.ts';
+import { ratings, teamResults } from './model/teamProfile.ts';
+import type { Match, Scorer, Team } from './types.ts';
 
 const STAGE_LABELS: Record<string, string> = { GROUP_STAGE: 'Fase de grupos', ...Object.fromEntries(KNOCKOUT_STAGES) };
 const STAGE_ORDER = ['ROUND_1', 'ROUND_2', 'ROUND_3', 'GROUP_STAGE', 'PLAY_OFFS', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
@@ -238,6 +238,93 @@ libertadores.get(
       zones: GROUP_ZONES,
       espn,
       espnError,
+    });
+  }),
+);
+
+libertadores.get(
+  '/time/:id',
+  route(async (req, res) => {
+    const a = await getAnalysis();
+    const id = Number(req.params.id);
+    const team = a.teams.find((t) => t.id === id);
+    if (!team) {
+      res.status(404).json({ error: 'Time não encontrado na Libertadores' });
+      return;
+    }
+    const group = a.groups.find((g) => g.rows.some((r) => r.team.id === id)) ?? null;
+    // Pela data: a fonte às vezes deixa um jogo antigo como "agendado" (DIM × FLA, de maio)
+    const groupDone = a.matches.filter((m) => m.stage === 'GROUP_STAGE').every((m) => isFinished(m) || Date.parse(m.utcDate) < Date.now());
+
+    // Caminho fase a fase: confronto, placar agregado e se passou, caiu ou a chance de passar
+    const journey = [];
+    for (const stage of STAGE_ORDER) {
+      const label = STAGE_LABELS[stage];
+      if (stage === 'GROUP_STAGE') {
+        const row = group?.rows.find((r) => r.team.id === id);
+        if (!group || !row) continue;
+        const result = !groupDone ? null : row.position <= GROUP_ZONES.libertadores ? 'passou' : 'eliminado';
+        journey.push({ stage, label, group: group.group, position: row.position, points: row.points, result, sulamericana: groupDone && row.position === GROUP_ZONES.sulamericana });
+        continue;
+      }
+      const ties = a.bracket.get(stage);
+      if (!ties) continue;
+      const i = ties.findIndex((t) => t.teams.some((x) => x?.id === id));
+      if (i < 0) {
+        // Fase futura: chance de chegar até ela
+        const reach = a.knockout.reach.get(stage)?.get(id) ?? 0;
+        if (reach > 0) journey.push({ stage, label, reach });
+        continue;
+      }
+      const t = ties[i];
+      const first = t.teams[0]?.id === id;
+      const adv = a.knockout.advance.get(`${stage}:${i}`);
+      journey.push({
+        stage,
+        label,
+        opponent: t.teams[first ? 1 : 0],
+        aggregate: first ? t.aggregate : [t.aggregate[1], t.aggregate[0]],
+        played: t.legs.some((l) => isFinished(l) || l.status === 'LIVE'),
+        result: t.winner ? (t.winner.id === id ? 'passou' : 'eliminado') : null,
+        advance: t.winner || adv == null ? null : first ? adv : 1 - adv,
+      });
+    }
+
+    const results = teamResults(id, a.matches);
+    const sum = (f: (r: (typeof results)[number]) => number) => results.reduce((s, r) => s + f(r), 0);
+    // Força pelo modelo, comparada com os outros times desta Libertadores
+    const rated = ratings(a.model, a.teams);
+    const rank = (key: 'attack' | 'defense') =>
+      [...rated.values()].filter((r) => (key === 'attack' ? r.attack > rated.get(id)![key] : r.defense < rated.get(id)![key])).length + 1;
+    let scorers: Scorer[] = [];
+    try {
+      scorers = ((await provider!.getScorers()) ?? []).filter((s) => s.team.id === id);
+    } catch {
+      // Artilharia é um extra: sem ela, a página abre do mesmo jeito
+    }
+
+    res.json({
+      team,
+      champion: a.knockout.champion.get(id) ?? 0,
+      journey,
+      group: group ? { name: group.group, rows: group.rows } : null,
+      zones: GROUP_ZONES,
+      stats: {
+        played: results.length,
+        won: results.filter((r) => r.result === 'V').length,
+        drawn: results.filter((r) => r.result === 'E').length,
+        lost: results.filter((r) => r.result === 'D').length,
+        goalsFor: sum((r) => r.goalsFor),
+        goalsAgainst: sum((r) => r.goalsAgainst),
+      },
+      ratings: { ...rated.get(id)!, attackRank: rank('attack'), defenseRank: rank('defense'), of: a.teams.length },
+      scorers,
+      watchUrl: config.watchUrl,
+      upcoming: a.matches
+        .filter((m) => !isFinished(m) && (m.home.id === id || m.away.id === id))
+        .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
+        .map((m) => ({ ...m, prediction: m.home.tbd || m.away.tbd ? null : predictMatch(modelFor(a, m), m) })),
+      results: results.reverse().map((r) => ({ ...r, stageLabel: STAGE_LABELS[r.match.stage ?? ''] ?? '' })),
     });
   }),
 );

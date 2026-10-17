@@ -16,6 +16,8 @@ const $ = (sel) => document.querySelector(sel);
 
 // Campeonato aberto: Brasileirão (bsa) ou Libertadores (lib)
 state.comp = 'bsa';
+// Na Libertadores, todo clube (brasileiro ou não) tem a sua página
+const teamHref = (id) => (state.comp === 'lib' ? `#/lib/time/${id}` : `#/time/${id}`);
 const jogoHref = (id) => (state.comp === 'lib' ? `#/lib/jogo/${id}` : `#/jogo/${id}`);
 
 const escapeHtml = (s) =>
@@ -41,8 +43,8 @@ function teamHtml(team, { short = false } = {}) {
     ? `<img class="crest" src="${escapeHtml(team.crest)}" alt="" loading="lazy" />`
     : `<span class="badge">${escapeHtml(team.tla)}</span>`;
   const name = `${icon}<span>${escapeHtml(short ? team.tla : team.shortName)}</span>`;
-  // A página do time é do Brasileirão: na Libertadores o nome não é link
-  return state.comp === 'lib' ? `<span class="team">${name}</span>` : `<a class="team" href="#/time/${team.id}">${name}</a>`;
+  if (team.tbd) return `<span class="team">${name}</span>`;
+  return `<a class="team" href="${teamHref(team.id)}">${name}</a>`;
 }
 
 function probCell(p, color) {
@@ -261,7 +263,7 @@ async function loadHero() {
       : `<span class="tag-vivo proximo">PRÓXIMO JOGO · ${escapeHtml(when)} · ${time}</span>`;
   const side = (t) =>
     state.comp === 'lib'
-      ? `<span class="lado">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></span>`
+      ? `<a class="lado" href="#/lib/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`
       : `<a class="lado" href="#/time/${t.id}">${crestImg(t)}<b>${escapeHtml(t.shortName)}</b></a>`;
   const p = m.prediction;
   const html = `${tag}
@@ -1599,7 +1601,7 @@ async function libMeta() {
 // Linha de um time dentro do cartão do confronto
 function tieTeam(t, goals, won, chance) {
   if (!t) return `<div class="tt tbd"><span class="badge">?</span><span>A definir</span></div>`;
-  return `<div class="tt ${won ? 'passou' : ''}">${crestImg(t)}<span>${escapeHtml(t.shortName)}</span>
+  return `<div class="tt ${won ? 'passou' : ''}">${crestImg(t)}<a href="#/lib/time/${t.id}">${escapeHtml(t.shortName)}</a>
     ${chance != null ? `<small class="chance-t">${pct(chance)}</small>` : ''}<b>${goals ?? ''}</b></div>`;
 }
 
@@ -1636,7 +1638,7 @@ async function loadLibBracket() {
   $('#lib-campeao').innerHTML = `<div class="corrida-card">${o.champions
     .map(
       (c) => `<div class="linha">${crestImg(c.team)}
-      <div class="trilho" style="--c:var(--amarelo)"><div data-w="${c.champion}"></div><span>${escapeHtml(c.team.shortName)}</span></div>
+      <div class="trilho" style="--c:var(--amarelo)"><div data-w="${c.champion}"></div><span><a href="#/lib/time/${c.team.id}">${escapeHtml(c.team.shortName)}</a></span></div>
       <b>${pct(c.champion)}</b></div>`,
     )
     .join('')}</div>`;
@@ -1689,6 +1691,96 @@ $('#lib-fases').addEventListener('click', (e) => {
   state.lib.stage = b.dataset.stage;
   refresh();
 });
+
+// Página de um time da Libertadores (qualquer clube, brasileiro ou não)
+const JOURNEY_LABEL = { passou: 'Passou', eliminado: 'Eliminado' };
+
+function journeyStep(s) {
+  if (s.stage === 'GROUP_STAGE') {
+    const status = s.result === 'passou' ? 'passou' : s.result === 'eliminado' ? 'eliminado' : 'aberto';
+    const note = s.result === 'passou' ? 'Classificado' : s.sulamericana ? 'Foi para a Sul-Americana' : s.result === 'eliminado' ? 'Eliminado' : 'Em disputa';
+    return `<div class="passo ${status}"><small>${escapeHtml(s.label)}</small>
+      <b>${s.position}º no Grupo ${escapeHtml(s.group)}</b><span>${s.points} pontos · ${note}</span></div>`;
+  }
+  if (s.reach != null) {
+    return `<div class="passo futuro"><small>${escapeHtml(s.label)}</small><b>Chance de chegar</b><span>${pct(s.reach)}</span></div>`;
+  }
+  const opp = s.opponent ? `${crestImg(s.opponent)} ${escapeHtml(s.opponent.shortName)}` : 'A definir';
+  const status = s.result ?? 'aberto';
+  const placar = s.played ? `<em>${s.aggregate[0]} – ${s.aggregate[1]}</em>` : '';
+  const note = s.result ? JOURNEY_LABEL[s.result] : s.advance != null ? `Chance de passar: ${pct(s.advance)}` : 'Em disputa';
+  return `<div class="passo ${status}"><small>${escapeHtml(s.label)}</small><b>${opp} ${placar}</b><span>${note}</span></div>`;
+}
+
+async function loadLibTeam() {
+  const d = await api(`/api/lib/time/${state.lib.teamId}`);
+  libMeta().catch(() => {});
+  const t = d.team;
+  document.title = `${t.shortName} · Libertadores`;
+  const out = d.journey.find((s) => s.result === 'eliminado');
+  const won = d.journey.find((s) => s.stage === 'FINAL' && s.result === 'passou');
+  const situation = won
+    ? 'Campeão da Libertadores'
+    : out
+      ? `Eliminado: ${out.label.toLowerCase()}${out.sulamericana ? ' (foi para a Sul-Americana)' : ''}`
+      : `Na disputa · ${pct(d.champion)} de chance de título`;
+  const icon = t.crest ? `<img class="crest big" src="${escapeHtml(t.crest)}" alt="" />` : `<span class="badge big">${escapeHtml(t.tla)}</span>`;
+  $('#lib-team-header').innerHTML = `${icon}<div><h2>${escapeHtml(t.name)}</h2><p class="muted">${situation}</p></div>`;
+
+  const s = d.stats;
+  const r = d.ratings;
+  const rating = (v, kind) => ratingText(v, kind).replace('da liga', 'da Libertadores');
+  $('#lib-team-stats').innerHTML = [
+    statCard('Campanha', `${s.won}V ${s.drawn}E ${s.lost}D`, `${s.played} jogos · ${s.goalsFor} gols marcados, ${s.goalsAgainst} sofridos`),
+    statCard('Chance de título', pct(d.champion), out ? 'já foi eliminado' : 'pelas simulações do mata-mata'),
+    statCard('Ataque', `${r.attackRank}º`, `de ${r.of} times · ${rating(r.attack, 'attack')}`),
+    statCard('Defesa', `${r.defenseRank}º`, `de ${r.of} times · ${rating(r.defense, 'defense')}`),
+  ].join('');
+
+  $('#lib-team-journey').innerHTML = d.journey.length ? d.journey.map(journeyStep).join('') : '<div class="empty">Sem jogos ainda.</div>';
+
+  $('#lib-team-upcoming-box').hidden = !d.upcoming.length;
+  $('#lib-team-upcoming').innerHTML = d.upcoming.map((m) => matchCard(m, d.watchUrl)).join('');
+
+  $('#lib-team-group-box').hidden = !d.group;
+  if (d.group) {
+    $('#lib-team-group-title').textContent = `Grupo ${d.group.name}`;
+    $('#lib-team-group').innerHTML = `<div class="table-wrap"><table class="standings mini-tab">
+      <thead><tr><th>#</th><th class="left">Time</th><th>P</th><th>J</th><th>SG</th></tr></thead><tbody>${d.group.rows
+        .map((row) => {
+          const zone = row.position <= d.zones.libertadores ? 'lib' : row.position <= d.zones.sulamericana ? 'sul' : '';
+          return `<tr class="${zone} ${row.team.id === t.id ? 'eu' : ''}">
+          <td class="pos">${row.position}</td><td class="left">${teamHtml(row.team)}</td><td class="points">${row.points}</td><td>${row.played}</td>
+          <td>${row.goalDiff > 0 ? '+' : ''}${row.goalDiff}</td></tr>`;
+        })
+        .join('')}</tbody></table></div>`;
+  }
+  $('#lib-team-scorers').innerHTML = d.scorers.length
+    ? `<div class="table-wrap"><table><thead><tr><th class="left">Jogador</th><th>Gols</th><th>Assist.</th></tr></thead><tbody>${d.scorers
+        .map((p) => `<tr><td class="left">${escapeHtml(p.player)}</td><td class="points">${p.goals}</td><td>${p.assists ?? '–'}</td></tr>`)
+        .join('')}</tbody></table></div>`
+    : '<div class="empty">Nenhum jogador do time entre os artilheiros da competição.</div>';
+
+  $('#lib-team-results').innerHTML = d.results.length
+    ? `<div class="table-wrap"><table>
+    <thead><tr><th>Fase</th><th>Data</th><th class="left">Adversário</th><th>Placar</th><th></th></tr></thead>
+    <tbody>${d.results
+      .map((res) => {
+        const m = res.match;
+        const date = new Date(m.utcDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const pen = m.penalties ? ` <small>(pên. ${m.penalties[0]}–${m.penalties[1]})</small>` : '';
+        const score = `${m.home.tla} ${m.homeGoals}×${m.awayGoals} ${m.away.tla}`;
+        return `<tr class="linha-jogo" data-jogo="${m.id}">
+          <td>${escapeHtml(res.stageLabel)}</td>
+          <td>${date}</td>
+          <td class="left"><span class="matchup">${teamHtml(res.opponent)} <span class="venue">${res.home ? 'casa' : 'fora'}</span></span></td>
+          <td class="points">${escapeHtml(m.home.tla)} ${m.homeGoals} × ${m.awayGoals} ${escapeHtml(m.away.tla)}${pen}</td>
+          <td><span class="form">${formLink(res.result, { id: m.id, score })}</span></td>
+        </tr>`;
+      })
+      .join('')}</tbody></table></div>`
+    : '<div class="empty">Nenhum jogo encerrado ainda.</div>';
+}
 
 // ---------- Simulador "e se" ----------
 
@@ -2083,6 +2175,7 @@ const loaders = {
   'lib-jogos': loadLibMatches,
   'lib-grupos': loadLibGroups,
   'lib-gols': loadLibScorers,
+  'lib-time': loadLibTeam,
   ese: loadWhatif,
 };
 
@@ -2114,7 +2207,11 @@ function applyRoute() {
   if (comp === 'lib') {
     // #/lib/chave, #/lib/jogos, #/lib/jogo/123...
     const jogoId = Number(location.hash.split('/')[3]);
-    if (id === 'jogo' && jogoId) {
+    if (id === 'time' && jogoId) {
+      state.tab = 'lib-time';
+      if (state.lib.teamId !== jogoId) window.scrollTo(0, 0);
+      state.lib.teamId = jogoId;
+    } else if (id === 'jogo' && jogoId) {
       state.tab = 'jogo';
       if (state.jogo.id !== jogoId) {
         state.jogo.tab = 'resumo';
@@ -2153,7 +2250,7 @@ function applyRoute() {
   $('#brand-nome').textContent = state.comp === 'lib' ? 'Libertadores' : 'Brasileirão';
   document.querySelectorAll('.comp-card').forEach((c) => c.classList.toggle('on', c.dataset.comp === state.comp));
   let activeTab = state.tab === 'jogador' ? 'scout' : state.tab === 'jogo' ? 'jogos' : state.tab;
-  if (state.comp === 'lib') activeTab = state.tab === 'jogo' ? 'lib/jogos' : state.tab.replace('lib-', 'lib/');
+  if (state.comp === 'lib') activeTab = state.tab === 'jogo' ? 'lib/jogos' : state.tab === 'lib-time' ? 'lib/grupos' : state.tab.replace('lib-', 'lib/');
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === activeTab));
   document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === state.tab));
   refresh();
