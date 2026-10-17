@@ -1,0 +1,23 @@
+{
+  "name": "projeto-futebol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard do Brasileirão com previsões (Poisson) e simulação Monte Carlo",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "node --watch-path=src --watch-path=.env src/server.ts",
+    "start": "node src/server.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2"
+  }
+}

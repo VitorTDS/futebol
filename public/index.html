@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel do Brasileirão</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="logo">⚽</span>
+        <div>
+          <h1>Painel do Brasileirão</h1>
+          <p id="meta" class="muted">Carregando…</p>
+        </div>
+      </div>
+      <nav>
+        <button class="tab active" data-tab="tabela">Classificação</button>
+        <button class="tab" data-tab="jogos">Jogos</button>
+        <button class="tab" data-tab="evolucao">Evolução</button>
+        <button class="tab" data-tab="acertos">Acertos</button>
+        <button class="tab" data-tab="artilharia">Artilharia</button>
+        <button class="tab" data-tab="scout">Scout</button>
+      </nav>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <main>
+      <section id="tabela" class="panel active">
+        <div class="table-wrap">
+          <table class="standings">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th class="left">Time</th>
+                <th title="Pontos">P</th>
+                <th title="Jogos">J</th>
+                <th title="Vitórias">V</th>
+                <th title="Empates">E</th>
+                <th title="Derrotas">D</th>
+                <th title="Saldo de gols">SG</th>
+                <th class="hide-sm">Últimos</th>
+                <th title="Pontuação final esperada" class="prob">Pts proj.</th>
+                <th class="prob">Título</th>
+                <th class="prob">Liberta</th>
+                <th class="prob">Rebaix.</th>
+              </tr>
+            </thead>
+            <tbody id="standings-body"></tbody>
+          </table>
+        </div>
+        <p class="legend">
+          <span class="zone-dot lib"></span> Libertadores
+          <span class="zone-dot sul"></span> Sul-Americana
+          <span class="zone-dot reb"></span> Rebaixamento
+          <span class="muted" id="sim-note"></span>
+        </p>
+      </section>
+
+      <section id="jogos" class="panel">
+        <div class="round-nav">
+          <button id="prev-round" aria-label="Rodada anterior">‹</button>
+          <h2 id="round-title">Rodada</h2>
+          <button id="next-round" aria-label="Próxima rodada">›</button>
+        </div>
+        <div id="matches" class="matches"></div>
+      </section>
+
+      <section id="evolucao" class="panel">
+        <p class="muted">Posição na tabela ao fim de cada rodada. Clique nos times da legenda para mostrar ou esconder.</p>
+        <div class="chart-wrap"><canvas id="evolution-chart"></canvas></div>
+      </section>
+
+      <section id="acertos" class="panel">
+        <p class="muted">
+          Cada jogo encerrado foi previsto de novo usando <b>só os jogos que aconteceram antes dele</b>,
+          como se o modelo tivesse rodado na véspera. Aqui está como ele se saiu.
+        </p>
+        <div id="history-stats" class="stats"></div>
+        <div id="model-comparison"></div>
+
+        <div class="chart-grid">
+          <figure class="chart-card">
+            <figcaption>
+              <b>Acerto por rodada</b>
+              <span class="muted">% de jogos em que o resultado mais provável aconteceu</span>
+            </figcaption>
+            <div class="chart-box"><canvas id="accuracy-chart"></canvas></div>
+          </figure>
+          <figure class="chart-card">
+            <figcaption>
+              <b>Calibração</b>
+              <span class="muted">Quando o modelo diz X%, acontece X% das vezes? Quanto mais perto da diagonal, melhor.</span>
+            </figcaption>
+            <div class="chart-box"><canvas id="calibration-chart"></canvas></div>
+          </figure>
+        </div>
+
+        <figure class="chart-card chart-wide">
+          <figcaption>
+            <b>Peso dos jogos antigos (TIME_DECAY)</b>
+            <span class="muted">
+              O Dixon-Coles dá menos peso aos jogos mais antigos. Cada ponto é o histórico de acertos refeito com uma
+              meia-vida diferente (em quantos dias o peso de um jogo cai pela metade). Nota Brier: quanto menor, melhor.
+            </span>
+          </figcaption>
+          <p id="decay-summary" class="decay-summary"></p>
+          <div class="chart-box" id="decay-chart-box"><canvas id="decay-chart"></canvas></div>
+        </figure>
+
+        <div class="round-nav">
+          <button id="history-prev" aria-label="Rodada anterior">‹</button>
+          <h2 id="history-title">Rodada</h2>
+          <button id="history-next" aria-label="Próxima rodada">›</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="left">Jogo</th>
+                <th>Chances (mandante / empate / visitante)</th>
+                <th>Palpite</th>
+                <th>Placar previsto</th>
+                <th>Resultado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="time" class="panel">
+        <a href="#/tabela" class="back">← Classificação</a>
+        <div id="team-header" class="team-header"></div>
+        <div id="team-stats" class="stats"></div>
+
+        <div class="chart-grid">
+          <figure class="chart-card">
+            <figcaption>
+              <b>Posição rodada a rodada</b>
+              <span class="muted">Onde o time estava na tabela ao fim de cada rodada</span>
+            </figcaption>
+            <div class="chart-box"><canvas id="team-position-chart"></canvas></div>
+          </figure>
+          <figure class="chart-card">
+            <figcaption>
+              <b>Onde deve terminar</b>
+              <span class="muted">Chance de cada posição final, pelas simulações do restante do campeonato</span>
+            </figcaption>
+            <div class="chart-box"><canvas id="team-final-chart"></canvas></div>
+            <p class="legend">
+              <span class="zone-dot lib"></span> Libertadores
+              <span class="zone-dot sul"></span> Sul-Americana
+              <span class="zone-dot reb"></span> Rebaixamento
+            </p>
+          </figure>
+        </div>
+
+        <figure class="chart-card chart-wide">
+          <figcaption>
+            <b>Gols por jogo</b>
+            <span class="muted">Marcados para cima, sofridos para baixo</span>
+          </figcaption>
+          <div class="chart-box"><canvas id="team-goals-chart"></canvas></div>
+        </figure>
+
+        <div class="two-col">
+          <div>
+            <h3>Casa x fora</h3>
+            <div id="team-split"></div>
+          </div>
+          <div>
+            <h3>Sequências</h3>
+            <div id="team-streaks"></div>
+          </div>
+        </div>
+
+        <h3>Próximos jogos</h3>
+        <div id="team-upcoming" class="matches"></div>
+
+        <h3>Resultados</h3>
+        <div id="team-results"></div>
+      </section>
+
+      <section id="scout" class="panel">
+        <div id="scout-status"></div>
+        <div class="filters">
+          <input id="scout-q" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador" />
+          <select id="scout-position" aria-label="Posição">
+            <option value="">Todas as posições</option>
+            <option>Goleiro</option>
+            <option>Defensor</option>
+            <option>Meio-campista</option>
+            <option>Atacante</option>
+          </select>
+          <select id="scout-team" aria-label="Time"><option value="">Todos os times</option></select>
+          <select id="scout-minutes" aria-label="Minutos jogados">
+            <option value="0">Qualquer minutagem</option>
+            <option value="450" selected>450+ minutos</option>
+            <option value="900">900+ minutos</option>
+            <option value="1350">1350+ minutos</option>
+          </select>
+        </div>
+        <p class="muted" id="scout-count"></p>
+        <div class="table-wrap">
+          <table class="scout-table">
+            <thead id="scout-head"></thead>
+            <tbody id="scout-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="jogador" class="panel">
+        <a href="#/scout" class="back">← Scout</a>
+        <div id="player-header" class="team-header"></div>
+        <p id="player-note" class="muted"></p>
+
+        <div class="chart-grid">
+          <figure class="chart-card">
+            <figcaption>
+              <b>Perfil</b>
+              <span class="muted" id="radar-caption"></span>
+            </figcaption>
+            <div class="compare-row">
+              <input id="compare-input" list="compare-options" placeholder="Comparar com…" aria-label="Comparar com outro jogador" />
+              <datalist id="compare-options"></datalist>
+              <button id="compare-clear" class="small-btn" hidden>Tirar comparação</button>
+            </div>
+            <div class="chart-box radar-box"><canvas id="radar-chart"></canvas></div>
+          </figure>
+          <figure class="chart-card">
+            <figcaption>
+              <b>Números</b>
+              <span class="muted">Percentil = quantos % dos jogadores da mesma posição ele supera</span>
+            </figcaption>
+            <div id="player-metrics"></div>
+          </figure>
+        </div>
+
+        <h3>Jogadores parecidos</h3>
+        <p class="muted">Mesma posição e perfil de números mais próximo.</p>
+        <div id="player-similar" class="similar"></div>
+      </section>
+
+      <section id="artilharia" class="panel">
+        <div id="scorers"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
