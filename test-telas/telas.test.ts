@@ -173,6 +173,13 @@ test('botões principais funcionam', async () => {
   }
   assert.deepEqual(themes, ['light', 'dark', null]);
 
+  // Jogo do topo: a seta escolhe outro jogo e fixa; "automático" volta ao normal
+  await visit(page, '#/tabela');
+  await page.click('.destaque-escolha .seta[data-hero="1"]');
+  await page.waitForFunction(() => document.querySelector('.destaque-escolha')!.textContent!.includes('Escolhido por você'));
+  await page.click('.destaque-escolha [data-hero="auto"]');
+  await page.waitForFunction(() => !document.querySelector('.destaque-escolha')!.textContent!.includes('Escolhido por você'));
+
   // Sino abre a caixa de alertas
   await page.click('#bell');
   assert.ok(await page.$eval('#alert-dialog', (d) => (d as HTMLDialogElement).open));

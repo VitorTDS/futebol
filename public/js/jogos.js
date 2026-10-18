@@ -1,5 +1,13 @@
 // ---------- Jogos ----------
 
+/** "📌 Destacar": põe o jogo no topo do campeonato dele */
+function pinButton(m, cls = 'pin-btn') {
+  if (m.status === 'FINISHED') return '';
+  const comp = m.comp ?? state.comp;
+  const on = getPin(comp)?.id === m.id;
+  return `<button class="${cls}" data-pin="${m.id}" data-comp="${comp}" data-q="${escapeHtml(matchListQuery(m, comp))}" title="Mostrar este jogo no topo">${on ? '📌 No topo' : '📌 Destacar'}</button>`;
+}
+
 // `showComp`: mostra sempre o campeonato (na agenda, que mistura todos)
 function matchCard(m, watchUrl, { showComp = false } = {}) {
   const date = new Date(m.utcDate);
@@ -34,6 +42,7 @@ function matchCard(m, watchUrl, { showComp = false } = {}) {
       <div class="match-foot">
         <span>${live ? 'Placar final mais provável' : 'Placar mais provável'}: <b>${lh} × ${la}</b></span>
         ${watchButton(m.comp ?? state.comp, watchUrl)}
+        ${pinButton(m)}
       </div>`;
   }
 

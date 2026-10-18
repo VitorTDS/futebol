@@ -904,3 +904,58 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
 /* Botão "Assistir" também no destaque do topo e na página do jogo */
 .destaque-links { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
 .jh-assistir { margin-top: 12px; display: flex; justify-content: center; }
+
+/* Escolha do jogo do topo */
+.destaque-escolha { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--giz-mute); font-weight: 700; }
+.destaque-escolha .seta {
+  width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid rgba(241, 245, 234, 0.4); background: rgba(0, 0, 0, 0.25);
+  color: var(--giz); font-size: 20px; line-height: 1; cursor: pointer; display: grid; place-items: center;
+}
+.destaque-escolha .seta:hover { color: var(--amarelo); border-color: var(--amarelo); }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--amarelo); cursor: pointer; text-decoration: underline; }
+.pin-btn { background: none; border: 1.5px solid var(--border); color: var(--muted); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.pin-btn:hover { color: var(--text); border-color: var(--tinta); }
+.pin-btn.claro { color: var(--giz); border-color: rgba(241, 245, 234, 0.4); margin-left: 10px; }
+.match-foot { flex-wrap: wrap; gap: 8px; }
+
+/* ---------- Celular: topo mais baixo e simétrico, tabela mais acima ---------- */
+@media (max-width: 640px) {
+  /* Linha de informações numa linha só */
+  #meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 150px); }
+  .brand h1 { font-size: 19px; }
+  .topo { padding-top: 16px; gap: 10px; }
+
+  /* Pílulas dos campeonatos: todas do mesmo tamanho, texto no meio */
+  /* (sem encolher, e ocupando também o espaço reservado aos botões, que ficam na linha de cima: 88px) */
+  .comp-switch { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; flex: 0 0 auto; width: calc(100% + 88px); }
+  .comp-card { height: 32px; padding: 0 2px; justify-content: center; text-align: center; border-radius: 9px; }
+  .comp-card span { align-items: center; }
+
+  /* Campo: só o meio (linha e círculo), sem as áreas cortadas nem a bola */
+  .campo svg rect:not(:first-child), .campo .bola { display: none; }
+
+  /* Jogo do topo mais compacto */
+  .destaque { margin-top: 2px; }
+  .tag-vivo { font-size: 10px; padding: 3px 9px; }
+  .placar { margin-top: 8px; gap: 6px; }
+  .lado img, .lado .badge { width: 44px; height: 44px; }
+  .lado b { font-size: 13px; }
+  .gols { font-size: 40px; }
+  .chances { margin-top: 10px; }
+  .chances .probbar { height: 9px; }
+  .palpite { font-size: 13px; margin-top: 4px; }
+  .destaque-escolha { margin-top: 6px; }
+  .destaque-escolha .seta { width: 30px; height: 30px; font-size: 18px; }
+  .destaque-links { margin-top: 6px; gap: 12px; }
+  .destaque-links .watch { font-size: 12px; padding: 4px 10px; }
+  .ver-detalhes { margin-top: 0; }
+
+  /* "Compartilhar" do título da tabela: só o ícone, para não quebrar a linha */
+  h2.sec .share-btn .share-txt { display: none; }
+
+  /* Aba Tabela: a classificação vem logo depois do topo; os jogos da rodada depois */
+  #tabela.active { display: flex; flex-direction: column; }
+  #tabela > * { order: 1; }
+  #tabela > .bloco-faixa { order: 2; }
+  #tabela > .bloco-corrida { order: 3; }
+}
