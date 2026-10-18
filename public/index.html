@@ -106,6 +106,7 @@
         <div id="faixa" class="faixa bloco-faixa"></div>
 
         <h2 class="sec">Classificação <span class="nota">cola aí!</span> <button id="tabela-share" class="small-btn share-btn" aria-label="Compartilhar a tabela">📤<span class="share-txt"> Compartilhar</span></button></h2>
+        <div class="vista-tabela" role="group" aria-label="O que mostrar na tabela"><button data-vista="tabela" class="on">Tabela</button><button data-vista="chances">Chances</button></div>
         <div class="table-wrap">
           <table class="standings">
             <thead>
@@ -113,13 +114,13 @@
                 <th>#</th>
                 <th class="left">Time</th>
                 <th title="Pontos">P</th>
-                <th title="Jogos">J</th>
+                <th class="col-tab" title="Jogos">J</th>
                 <th class="hide-sm" title="Vitórias">V</th>
                 <th class="hide-sm" title="Empates">E</th>
                 <th class="hide-sm" title="Derrotas">D</th>
-                <th title="Saldo de gols">SG</th>
-                <th>Últimos</th>
-                <th title="Pontuação final esperada" class="prob">Pts proj.</th>
+                <th class="col-tab" title="Saldo de gols">SG</th>
+                <th class="col-tab">Últimos</th>
+                <th title="Pontuação final esperada" class="prob col-proj">Pts proj.</th>
                 <th class="prob">Título</th>
                 <th class="prob">Liberta</th>
                 <th class="prob">Rebaix.</th>
@@ -191,9 +192,10 @@
 
       <section id="b-tabela" class="panel">
         <h2 class="sec">Série B <span class="nota">quem sobe?</span></h2>
+        <div class="vista-tabela" role="group" aria-label="O que mostrar na tabela"><button data-vista="tabela" class="on">Tabela</button><button data-vista="chances">Chances</button></div>
         <div class="table-wrap">
           <table class="standings">
-            <thead><tr><th>#</th><th class="left">Time</th><th>P</th><th>J</th><th>V</th><th>SG</th><th>Últimos</th><th>Título</th><th>Acesso</th><th>Queda</th></tr></thead>
+            <thead><tr><th>#</th><th class="left">Time</th><th>P</th><th class="col-tab">J</th><th class="hide-sm">V</th><th class="col-tab">SG</th><th class="col-tab">Últimos</th><th class="prob">Título</th><th class="prob">Acesso</th><th class="prob">Queda</th></tr></thead>
             <tbody id="b-standings"></tbody>
           </table>
         </div>

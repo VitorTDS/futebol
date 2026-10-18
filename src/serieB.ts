@@ -10,7 +10,7 @@ import { fitDixonColes } from './model/dixonColes.ts';
 import { predictMatch, topScores, type FittedModel } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
 import { simulateSeason, type TeamOutlook } from './model/simulation.ts';
-import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
+import { computeEvolution, computeStandings, currentMatchday, isFinished, isUpcoming, teamsFrom, type StandingRow } from './model/standings.ts';
 import { ratings, teamResults } from './model/teamProfile.ts';
 import { pickedScores } from './model/whatif.ts';
 import type { Match, Team } from './types.ts';
@@ -188,7 +188,7 @@ export function createSerieB(opts: { year: number; cups?: CupSummary[] }) {
         evolution: { matchdays, positions: positions.get(id) },
         results: teamResults(id, a.matches).reverse(),
         upcoming: a.matches
-          .filter((m) => !isFinished(m) && (m.home.id === id || m.away.id === id))
+          .filter((m) => isUpcoming(m) && (m.home.id === id || m.away.id === id))
           .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
           .map((m) => ({ ...m, prediction: predictMatch(a.model, m) })),
         cups,

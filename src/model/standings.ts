@@ -80,6 +80,12 @@ export function computeStandings(teams: Team[], matches: Match[], upToMatchday =
  * Primeira rodada com pelo menos metade dos jogos por disputar. Um jogo adiado
  * solto numa rodada antiga não deve puxar a "rodada atual" para trás.
  */
+/**
+ * Jogo que ainda vai acontecer. Jogo "agendado" com data de mais de 6 horas atrás
+ * fica de fora: a fonte às vezes deixa um jogo adiado ou já jogado como agendado.
+ */
+export const isUpcoming = (m: Match, now = Date.now()) => !isFinished(m) && Date.parse(m.utcDate) > now - 6 * 3_600_000;
+
 export function currentMatchday(matches: Match[]): number {
   const pending = matches.filter((m) => !isFinished(m));
   if (!pending.length) return Math.max(...matches.map((m) => m.matchday));

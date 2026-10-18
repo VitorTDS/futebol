@@ -57,12 +57,8 @@ async function loadAgenda() {
 
 /** Cartão do jogo com o campeonato sempre à vista e o botão de pôr na agenda */
 function agendaCard(m, watchUrl) {
-  const card = matchCard({ ...m, comp: m.comp }, watchUrl, { showComp: true });
-  if (m.status === 'FINISHED') return card;
-  return card.replace(
-    /<\/article>$/,
-    `<button class="add-cal small-btn" data-cal="${m.comp}:${m.id}" title="Pôr este jogo na agenda do celular">📅 Pôr na agenda</button></article>`,
-  );
+  const extra = m.status === 'FINISHED' ? '' : `<button class="pin-btn" data-cal="${m.comp}:${m.id}" title="Pôr este jogo na agenda do celular">📅 Agenda</button>`;
+  return matchCard({ ...m, comp: m.comp }, watchUrl, { showComp: true, extra });
 }
 
 // ---------- Agenda do celular (.ics: Google Agenda, iPhone, Outlook) ----------

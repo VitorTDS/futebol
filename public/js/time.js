@@ -214,16 +214,16 @@ function renderTeamResults(d, target = '#team-results') {
     return;
   }
   $(target).innerHTML = `<div class="table-wrap"><table>
-    <thead><tr><th>Rodada</th><th>Data</th><th class="left">Adversário</th><th>Placar</th><th></th></tr></thead>
+    <thead><tr><th>Rodada</th><th class="hide-sm">Data</th><th class="left">Adversário</th><th>Placar</th><th></th></tr></thead>
     <tbody>${d.results
       .map((r) => {
         const m = r.match;
         const date = new Date(m.utcDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         return `<tr class="linha-jogo" data-jogo="${m.id}">
           <td>${m.matchday}</td>
-          <td>${date}</td>
+          <td class="hide-sm">${date}</td>
           <td class="left"><span class="matchup">${teamHtml(r.opponent)} <span class="venue">${r.home ? 'casa' : 'fora'}</span></span></td>
-          <td class="points">${escapeHtml(m.home.tla)} ${m.homeGoals} × ${m.awayGoals} ${escapeHtml(m.away.tla)}</td>
+          <td class="points"><span class="hide-sm">${escapeHtml(m.home.tla)} </span>${m.homeGoals} × ${m.awayGoals}<span class="hide-sm"> ${escapeHtml(m.away.tla)}</span></td>
           <td><span class="form"><span class="${r.result}">${r.result}</span></span></td>
         </tr>`;
       })

@@ -10,7 +10,7 @@ import { fitDixonColes } from './model/dixonColes.ts';
 import { buildBracket, simulateKnockout, type KnockoutOutlook, type Tie } from './model/knockout.ts';
 import { predictMatch, topScores, type FittedModel } from './model/prediction.ts';
 import { mulberry32 } from './model/random.ts';
-import { computeStandings, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
+import { computeStandings, isFinished, isUpcoming, teamsFrom, type StandingRow } from './model/standings.ts';
 import { ratings, teamResults } from './model/teamProfile.ts';
 import { resilient } from './data/resilient.ts';
 import type { DataProvider, Match, Scorer, Team } from './types.ts';
@@ -245,7 +245,7 @@ export function createCup(o: CupOptions) {
     // Fase em disputa agora: confronto em aberto ou grupo ainda rolando
     const now = journey.find((s) => s.result == null && !('reach' in s));
     const upcoming = a.matches
-      .filter((m) => !isFinished(m) && !m.home.tbd && !m.away.tbd && (m.home.id === id || m.away.id === id))
+      .filter((m) => isUpcoming(m) && !m.home.tbd && !m.away.tbd && (m.home.id === id || m.away.id === id))
       .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
       .slice(0, 2)
       .map((m) => ({ ...m, comp: o.key, stageLabel: STAGE_LABELS[m.stage ?? ''] ?? '', prediction: predictMatch(modelFor(a, m), m) }));
@@ -456,7 +456,7 @@ export function createCup(o: CupOptions) {
         scorers,
         watchUrl: config.watchUrl,
         upcoming: a.matches
-          .filter((m) => !isFinished(m) && (m.home.id === id || m.away.id === id))
+          .filter((m) => isUpcoming(m) && (m.home.id === id || m.away.id === id))
           .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
           .map((m) => ({ ...m, prediction: m.home.tbd || m.away.tbd ? null : predictMatch(modelFor(a, m), m) })),
         results: results.reverse().map((r) => ({ ...r, stageLabel: STAGE_LABELS[r.match.stage ?? ''] ?? '' })),

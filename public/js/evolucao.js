@@ -31,6 +31,14 @@ function lineColor(color) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/** Legenda dos clubes: à direita no computador; embaixo no celular (à direita ela espreme o gráfico) */
+function teamLegend() {
+  const phone = matchMedia('(max-width: 640px)').matches;
+  return phone
+    ? { position: 'bottom', labels: { boxWidth: 18, boxHeight: 3, font: { size: 10 }, padding: 8 } }
+    : { position: 'right', labels: { boxWidth: 28, boxHeight: 3 } };
+}
+
 // Cor e tipo de linha de cada clube (os dois gráficos da aba usam os mesmos)
 state.teamStyle = new Map();
 
@@ -88,7 +96,7 @@ async function loadEvolution() {
         x: { title: { display: true, text: 'Rodada' } },
       },
       // Legenda como amostra da linha (cor e tracejado de cada time)
-      plugins: { legend: { position: 'right', labels: { boxWidth: 28, boxHeight: 3 } } },
+      plugins: { legend: teamLegend() },
     },
   });
 }
@@ -132,7 +140,7 @@ async function loadChances() {
         x: { title: { display: true, text: 'Rodada' } },
       },
       plugins: {
-        legend: { position: 'right', labels: { boxWidth: 28, boxHeight: 3 } },
+        legend: teamLegend(),
         tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${String(item.raw).replace('.', ',')}%` } },
       },
     },

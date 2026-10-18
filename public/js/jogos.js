@@ -9,7 +9,8 @@ function pinButton(m, cls = 'pin-btn') {
 }
 
 // `showComp`: mostra sempre o campeonato (na agenda, que mistura todos)
-function matchCard(m, watchUrl, { showComp = false } = {}) {
+// `extra`: botão a mais no rodapé do card (a agenda põe o "Pôr na agenda")
+function matchCard(m, watchUrl, { showComp = false, extra = '' } = {}) {
   const date = new Date(m.utcDate);
   const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const live = m.status === 'LIVE';
@@ -40,9 +41,8 @@ function matchCard(m, watchUrl, { showComp = false } = {}) {
         </div>
       </div>
       <div class="match-foot">
-        <span>${live ? 'Placar final mais provável' : 'Placar mais provável'}: <b>${lh} × ${la}</b></span>
-        ${watchButton(m.comp ?? state.comp, watchUrl)}
-        ${pinButton(m)}
+        <span class="palpite-card">${live ? 'Placar final mais provável' : 'Placar mais provável'}: <b>${lh} × ${la}</b></span>
+        <span class="acoes-card">${watchButton(m.comp ?? state.comp, watchUrl)}${pinButton(m)}${extra}</span>
       </div>`;
   }
 

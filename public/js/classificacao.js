@@ -48,13 +48,13 @@ async function loadOverview() {
         <td class="pos">${row.position}</td>
         <td class="left">${teamHtml(row.team)}</td>
         <td class="points" data-n="${row.points}">${row.points}</td>
-        <td>${row.played}</td>
+        <td class="col-tab">${row.played}</td>
         <td class="hide-sm">${row.won}</td>
         <td class="hide-sm">${row.drawn}</td>
         <td class="hide-sm">${row.lost}</td>
-        <td>${row.goalDiff > 0 ? '+' : ''}${row.goalDiff}</td>
-        <td><span class="form">${row.form.map((r, i) => formLink(r, row.formMatches[i])).join('')}</span></td>
-        <td class="prob num">${o.expectedPoints.toFixed(1).replace('.', ',')}</td>
+        <td class="col-tab">${row.goalDiff > 0 ? '+' : ''}${row.goalDiff}</td>
+        <td class="col-tab"><span class="form">${row.form.map((r, i) => formLink(r, row.formMatches[i])).join('')}</span></td>
+        <td class="prob num col-proj">${o.expectedPoints.toFixed(1).replace('.', ',')}</td>
         ${probCell(o.title, 'var(--titulo)')}
         ${probCell(o.libertadores, 'var(--lib)')}
         ${probCell(o.relegation, 'var(--reb)')}

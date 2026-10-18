@@ -26,7 +26,7 @@ import { compareFinished, compareUpcoming, loadFinishedOdds, marketProgress } fr
 import { push, pushEvents, pushMessage } from './push.ts';
 import { createSerieB } from './serieB.ts';
 import { createSulamericanaCup } from './sulamericana.ts';
-import { computeEvolution, computeStandings, currentMatchday, isFinished, teamsFrom, type StandingRow } from './model/standings.ts';
+import { computeEvolution, computeStandings, currentMatchday, isFinished, isUpcoming, teamsFrom, type StandingRow } from './model/standings.ts';
 import { LIST_METRICS, METRICS, POSITION_METRICS, ScoutIndex } from './model/scout.ts';
 import { ratings, splitStats, streaks, teamResults, type Ratings } from './model/teamProfile.ts';
 import type { Match, PlayerStats, Position, Team } from './types.ts';
@@ -663,7 +663,7 @@ app.get(
     const results = teamResults(id, a.matches);
     const { matchdays, positions } = computeEvolution(a.teams, a.matches);
     const upcoming = a.matches
-      .filter((m) => !isFinished(m) && (m.home.id === id || m.away.id === id))
+      .filter((m) => isUpcoming(m) && (m.home.id === id || m.away.id === id))
       .sort((x, y) => x.utcDate.localeCompare(y.utcDate))
       .slice(0, 5)
       .map((m) => ({ ...m, prediction: predictMatch(a.model, m) }));

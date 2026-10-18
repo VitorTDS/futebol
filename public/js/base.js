@@ -99,6 +99,19 @@ async function api(path) {
   return body;
 }
 
+// ---------- Tabela no celular: "Tabela" (P, J, SG, últimos) ou "Chances" ----------
+
+function applyTableView(view) {
+  document.querySelectorAll('.standings').forEach((t) => t.classList.toggle('vista-chances', view === 'chances'));
+  document.querySelectorAll('.vista-tabela button').forEach((b) => b.classList.toggle('on', b.dataset.vista === view));
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.vista-tabela button');
+  if (!b) return;
+  store.set('tabela.vista', b.dataset.vista);
+  applyTableView(b.dataset.vista);
+});
+
 /** Aviso "sem internet": some sozinho quando uma resposta volta a vir da rede */
 function showOffline(savedAt) {
   const el = $('#offline-aviso');
@@ -274,3 +287,6 @@ $('#tema').addEventListener('click', () => {
 });
 // No automático, acompanha a troca do celular (ex.: modo escuro à noite)
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => store.get('tema', 'auto') === 'auto' && applyTheme('auto'));
+
+// Visão da tabela no celular que a pessoa escolheu da última vez (precisa do store, definido acima)
+applyTableView(store.get('tabela.vista', 'tabela'));

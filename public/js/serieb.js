@@ -20,9 +20,9 @@ async function loadBTable() {
       (r) => `<tr class="${zone(r.position)}">
         <td class="pos">${r.position}</td>
         <td class="left">${teamHtml(r.team)}</td>
-        <td class="points">${r.points}</td><td>${r.played}</td><td>${r.won}</td>
-        <td>${r.goalDiff > 0 ? '+' : ''}${r.goalDiff}</td>
-        <td><span class="form">${r.form.map((x, i) => formLink(x, r.formMatches[i])).join('')}</span></td>
+        <td class="points">${r.points}</td><td class="col-tab">${r.played}</td><td class="hide-sm">${r.won}</td>
+        <td class="col-tab">${r.goalDiff > 0 ? '+' : ''}${r.goalDiff}</td>
+        <td class="col-tab"><span class="form">${r.form.map((x, i) => formLink(x, r.formMatches[i])).join('')}</span></td>
         ${probCell(r.outlook.title, 'var(--titulo)')}${probCell(r.outlook.promotion, 'var(--lib)')}${probCell(r.outlook.relegation, 'var(--reb)')}
       </tr>`,
     )

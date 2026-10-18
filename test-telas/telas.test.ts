@@ -79,7 +79,8 @@ async function visit(page: Page, hash: string) {
   return page.evaluate(() => ({
     banner: (document.querySelector('#banner') as HTMLElement).hidden ? null : document.querySelector('#banner')!.textContent,
     text: (document.querySelector('.panel.active') as HTMLElement).innerText.length,
-    tooWide: document.documentElement.scrollWidth > window.innerWidth + 1,
+    // clientWidth é a largura da tela; no modo celular, innerWidth cresce junto com a página
+    tooWide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
   }));
 }
 
@@ -179,6 +180,16 @@ test('botões principais funcionam', async () => {
   await page.waitForFunction(() => document.querySelector('.destaque-escolha')!.textContent!.includes('Escolhido por você'));
   await page.click('.destaque-escolha [data-hero="auto"]');
   await page.waitForFunction(() => !document.querySelector('.destaque-escolha')!.textContent!.includes('Escolhido por você'));
+
+  // Celular: chavinha da tabela troca as colunas ("Chances" mostra título, vaga e queda)
+  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await visit(page, '#/tabela');
+  const colunas = () => page.$$eval('#tabela .standings thead th', (ths) => ths.filter((t) => getComputedStyle(t).display !== 'none').map((t) => t.textContent!.trim()));
+  await page.click('#tabela .vista-tabela [data-vista="chances"]');
+  assert.ok((await colunas()).includes('Título'), 'visão Chances mostra o título');
+  await page.click('#tabela .vista-tabela [data-vista="tabela"]');
+  assert.ok(!(await colunas()).includes('Título'), 'visão Tabela esconde as chances');
+  await page.setViewport({ width: 1366, height: 900 });
 
   // Sino abre a caixa de alertas
   await page.click('#bell');

@@ -761,8 +761,9 @@ td.metric { font-variant-numeric: tabular-nums; }
   .comp-card { flex: 1; justify-content: center; padding: 6px 8px; }
   .comp-card small { display: none; }
   .bracket { grid-auto-columns: 82%; margin: 0 -16px; padding: 4px 16px 12px; }
-  .grupos-grid { grid-template-columns: 1fr; }
-  .ese-grid { grid-template-columns: 1fr; }
+  /* minmax(0, 1fr): a coluna segue a tela (só "1fr" cresce até caber o conteúdo mais largo) */
+  .grupos-grid { grid-template-columns: minmax(0, 1fr); }
+  .ese-grid { grid-template-columns: minmax(0, 1fr); }
   .ese-focus { grid-template-columns: repeat(2, 1fr); }
   .ese-meu { grid-column: 1 / -1; flex-direction: row; }
   .ese-meu img, .ese-meu .badge { width: 36px; height: 36px; }
@@ -774,7 +775,9 @@ td.metric { font-variant-numeric: tabular-nums; }
   .banner { margin: 12px 16px 0; }
   .hide-sm { display: none; }
   .matches { grid-template-columns: 1fr; }
-  .chart-wrap { height: 420px; }
+  /* Gráficos dos clubes: a legenda fica embaixo, então precisam de mais altura */
+  .chart-wrap { height: 560px; padding: 10px 6px; }
+  .chart-box { height: 220px; }
   .chart-grid, .two-col { grid-template-columns: 1fr; }
   h2.sec { font-size: 22px; }
   .placar { gap: 10px; }
@@ -958,4 +961,52 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
   #tabela > * { order: 1; }
   #tabela > .bloco-faixa { order: 2; }
   #tabela > .bloco-corrida { order: 3; }
+}
+
+/* Chavinha "Tabela | Chances": só no celular (no computador cabe tudo) */
+.vista-tabela { display: none; }
+/* Nome dentro das barras da Corrida: etiqueta com fundo, legível nos dois temas */
+.trilho span { top: 3px; bottom: 3px; padding: 0 7px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--text); }
+.acoes-card { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .vista-tabela { display: inline-flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: 999px; background: var(--papel-2); }
+  .vista-tabela button { font: inherit; font-size: 13px; font-weight: 800; padding: 6px 16px; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer; }
+  .vista-tabela button.on { background: var(--amarelo); color: var(--sobre-destaque); }
+  .standings:not(.vista-chances) .prob { display: none; }
+  .standings.vista-chances .col-tab { display: none; }
+  /* Nas chances: só os números das três chances (os pontos projetados ficam no computador) */
+  .standings.vista-chances .col-proj { display: none; }
+  .standings th, .standings td { padding-left: 5px; padding-right: 5px; }
+  /* Últimos: só os 3 jogos mais recentes (a lista vai do mais antigo para o mais novo) */
+  .standings .form > :nth-last-child(n + 4) { display: none; }
+  .standings .form { gap: 3px; }
+  .standings .form a, .standings .form span { width: 22px; height: 22px; }
+  .standings.vista-chances th.prob { font-size: 10px; letter-spacing: 0; }
+  .standings.vista-chances .team span { max-width: 84px; }
+
+  /* O jogo em destaque só nas telas principais; nas outras, direto ao assunto */
+  body:not([data-tab="tabela"]):not([data-tab="lib-chave"]):not([data-tab="b-tabela"]) .destaque { display: none; }
+  body:not([data-tab="tabela"]):not([data-tab="lib-chave"]):not([data-tab="b-tabela"]) .hero { padding-bottom: 6px; }
+
+  /* Cartões de números dois por linha */
+  .stats { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { padding: 10px 12px; }
+  .stat .value { font-size: 22px; }
+  .stat .compare { font-size: 11px; }
+  .copas-time { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .copa-time { padding: 10px 12px; }
+  .copa-time b { font-size: 22px; }
+
+  /* Card de jogo mais baixo: o card inteiro abre o jogo (sem o "Ver detalhes"), botões numa linha */
+  .match { padding: 12px; gap: 8px; }
+  .match .ver-jogo { display: none; }
+  .match-foot { padding-top: 8px; }
+  .match-foot .palpite-card { flex-basis: 100%; }
+  .acoes-card { width: 100%; justify-content: space-between; }
+  .acoes-card .watch { font-size: 12px; padding: 5px 10px; }
+
+  /* Página do jogo: "Compartilhar" na linha do "voltar"; abas menores para caberem */
+  #jogo-share { float: right; margin-top: -2px; }
+  .jogo-tabs button { font-size: 12px; padding: 8px 12px; }
 }
