@@ -118,7 +118,7 @@ window.addEventListener('offline', () => {
 });
 window.addEventListener('online', () => {
   $('#offline-aviso').hidden = true;
-  if (typeof refresh === 'function') refresh();
+  refresh();
 });
 
 /**
@@ -139,6 +139,17 @@ function dayName(date, { long = false } = {}) {
 
 /** "Hoje · 18:00", "Amanhã · 12:00", "qua., 21/10 · 21:30" */
 const kickoffText = (date, opts) => `${dayName(date, opts)} · ${new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+// Link do botão "Assistir" de cada campeonato (vem do servidor; .env pode trocar)
+state.watch = {};
+api('/api/assistir').then((w) => (state.watch = w), () => {});
+
+/** Botão "Assistir" do jogo: abre o canal do campeonato (no celular, o app do Globoplay) */
+function watchButton(comp, fallbackUrl, cls = 'watch') {
+  const w = state.watch[comp] ?? { url: fallbackUrl, label: null };
+  if (!w.url) return '';
+  return `<a class="${cls}" href="${escapeHtml(w.url)}" target="_blank" rel="noopener">📺 Assistir${w.label ? ` no ${escapeHtml(w.label)}` : ''}</a>`;
+}
 
 function pct(p) {
   if (p == null) return '–';
@@ -233,7 +244,8 @@ const THEME_ICON = {
   dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
 };
 
-function applyTheme(theme) {
+/** `redraw`: redesenha a tela (não na abertura: o resto do código ainda está carregando) */
+function applyTheme(theme, { redraw = true } = {}) {
   if (theme === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = theme;
   $('#tema-ico').setAttribute('d', THEME_ICON[theme]);
@@ -251,10 +263,10 @@ function applyTheme(theme) {
     chart.update('none');
   }
   // Redesenha a tela (cores dos clubes nos gráficos mudam com o tema)
-  if (typeof refresh === 'function') refresh();
+  if (redraw) refresh();
 }
 
-applyTheme(store.get('tema', 'auto'));
+applyTheme(store.get('tema', 'auto'), { redraw: false });
 $('#tema').addEventListener('click', () => {
   const next = THEMES[(THEMES.indexOf(store.get('tema', 'auto')) + 1) % THEMES.length];
   store.set('tema', next);

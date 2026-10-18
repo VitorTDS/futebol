@@ -5,7 +5,8 @@ import { isMatchTime } from '../model/liveEvents.ts';
 import { keepFinished, staleMatchdays } from './repair.ts';
 import type { DataProvider, Match, MatchStatus, Scorer, Team } from '../types.ts';
 
-const BASE_URL = 'https://api.football-data.org/v4';
+// FOOTBALL_DATA_URL: outro endereço (os testes usam para simular a fonte fora do ar)
+const BASE_URL = process.env.FOOTBALL_DATA_URL || 'https://api.football-data.org/v4';
 // Plano grátis: 10 requisições por minuto. Em hora de jogo os placares são
 // buscados a cada 15 s (4 por minuto), fora dela a cada minuto.
 const TTL_MS = 60_000;

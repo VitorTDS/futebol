@@ -3,10 +3,14 @@
 state.lib = { stage: null };
 
 async function libMeta() {
+  const comp = state.comp;
   const o = await api(cupApi('/overview'));
-  const updated = new Date(o.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  $('#meta').textContent = `${CUP_INFO[state.comp].title} · ${o.currentStage.label} · fonte: ${o.source} · atualizado às ${updated}`;
-  $(`#${state.comp}-fase`).textContent = o.currentStage.label;
+  // A linha do topo é de todas as telas: se a pessoa já trocou de campeonato, não escreve
+  if (state.comp === comp) {
+    const updated = new Date(o.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    $('#meta').textContent = `${CUP_INFO[comp].title} · ${o.currentStage.label} · fonte: ${o.source} · atualizado às ${updated}`;
+  }
+  $(`#${comp}-fase`).textContent = o.currentStage.label;
   return o;
 }
 
@@ -114,9 +118,10 @@ async function loadLibGroups() {
 }
 
 async function loadLibScorers() {
+  // A copa de quando a tela abriu (a pessoa pode trocar enquanto os dados chegam)
+  const info = CUP_INFO[state.comp];
   const data = await api(cupApi('/scorers'));
   libMeta().catch(() => {});
-  const info = CUP_INFO[state.comp];
   $('#gols-nota').textContent = `da ${info.name}`;
   $('#gols-aviso').hidden = !info.scorersNote;
   $('#gols-aviso').textContent = info.scorersNote ?? '';
@@ -170,12 +175,14 @@ function journeyStep(s) {
 }
 
 async function loadLibTeam() {
+  // A copa de quando a tela abriu (a pessoa pode trocar enquanto os dados chegam)
+  const comp = state.comp;
   const d = await api(cupApi(`/time/${state.lib.teamId}`));
   libMeta().catch(() => {});
   const t = d.team;
-  const cup = CUP_INFO[state.comp].name;
+  const cup = CUP_INFO[comp].name;
   document.title = `${t.shortName} · ${cup}`;
-  $('#lib-time-back').href = `#/${state.comp}/${CUP_INFO[state.comp].pages.includes('grupos') ? 'grupos' : 'chave'}`;
+  $('#lib-time-back').href = `#/${comp}/${CUP_INFO[comp].pages.includes('grupos') ? 'grupos' : 'chave'}`;
   $('#lib-time-back').textContent = `← ${cup}`;
   $('#lib-team-caminho').textContent = `Caminho na ${cup}`;
   // Clube da Série A: link para a página completa dele (Brasileirão e todas as copas)

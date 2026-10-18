@@ -8,7 +8,8 @@
 // Outro Chrome: CHROME_PATH="C:\...\chrome.exe" npm run test:telas
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { createWriteStream, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
@@ -23,7 +24,13 @@ let browser: Browser;
 
 before(async () => {
   assert.ok(existsSync(CHROME), `Chrome não encontrado em ${CHROME} (use CHROME_PATH)`);
-  server = spawn(process.execPath, ['src/server.ts'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
+  // O que o servidor escreve fica num arquivo, para investigar quando um teste falha
+  const log = path.join(tmpdir(), 'painel-test-telas.log');
+  server = spawn(process.execPath, ['src/server.ts'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const out = createWriteStream(log);
+  server.stdout!.pipe(out);
+  server.stderr!.pipe(out);
+  console.log(`registro do servidor: ${log}`);
   // Espera o servidor responder
   for (let i = 0; i < 60; i++) {
     try {
@@ -51,6 +58,9 @@ async function openPanel(width: number, height: number) {
     if (msg.type() === 'error' && !/ERR_ABORTED|Failed to fetch|favicon/.test(msg.text())) errors.push(`console: ${msg.text()}`);
   });
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle2', timeout: 60_000 });
+  // Erro na abertura vira aviso na tela (e some na atualização seguinte): confere já
+  const banner = await page.$eval('#banner', (b) => ((b as HTMLElement).hidden ? null : b.textContent));
+  if (banner) errors.push(`aviso na abertura: ${banner}`);
   return { page, errors };
 }
 
@@ -63,7 +73,8 @@ async function visit(page: Page, hash: string) {
       const banner = document.querySelector('#banner') as HTMLElement;
       return (panel && (panel as HTMLElement).innerText.length > 120) || (banner && !banner.hidden);
     },
-    { timeout: 30_000 },
+    // Logo depois de ligar, a football-data pode mandar esperar até 1 minuto (limite do plano grátis)
+    { timeout: 90_000 },
   );
   return page.evaluate(() => ({
     banner: (document.querySelector('#banner') as HTMLElement).hidden ? null : document.querySelector('#banner')!.textContent,
@@ -172,5 +183,30 @@ test('botões principais funcionam', async () => {
   await page.waitForFunction(() => document.body.dataset.comp === 'serieb' && document.querySelector('#brand-nome')!.textContent === 'Série B');
 
   await page.close();
+  assert.deepEqual(errors, []);
+});
+
+test('trocar de tela com a internet lenta não deixa erro para trás', async () => {
+  const { page, errors } = await openPanel(390, 844);
+  // Sem o service worker no meio, para segurar um pedido específico
+  await page.setBypassServiceWorker(true);
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    // Internet lenta só na artilharia da Sul-Americana
+    if (req.url().includes('/api/sula/scorers')) setTimeout(() => req.continue(), 3000);
+    else req.continue();
+  });
+  // Abre a artilharia e, antes de ela chegar, já troca para a Série B
+  await page.evaluate(() => (location.hash = '#/sula/gols'));
+  await new Promise((r) => setTimeout(r, 300));
+  const r = await visit(page, '#/serieb/tabela');
+  // Espera a carga atrasada terminar (é ela que quebrava)
+  await new Promise((r) => setTimeout(r, 4000));
+  const banner = await page.$eval('#banner', (b) => ((b as HTMLElement).hidden ? null : b.textContent));
+  const meta = await page.$eval('#meta', (m) => m.textContent);
+  await page.close();
+  assert.equal(r.banner, null);
+  assert.equal(banner, null, 'aviso de erro depois da carga atrasada');
+  assert.match(meta!, /^Série B/, 'a linha do topo continua sendo da Série B');
   assert.deepEqual(errors, []);
 });

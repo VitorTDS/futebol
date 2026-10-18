@@ -16,6 +16,18 @@ export const config = {
   competition: process.env.COMPETITION || 'BSA',
   season: process.env.SEASON || undefined,
   watchUrl: process.env.WATCH_URL || 'https://globoplay.globo.com/',
+  /**
+   * Botão "Assistir" de cada campeonato. O Brasileirão abre direto o Premiere ao vivo
+   * no Globoplay (no celular, abre o app, onde a pessoa já está logada). Os outros
+   * usam WATCH_URL até ganharem o link do canal deles.
+   */
+  watch: {
+    bsa: process.env.WATCH_URL_BSA || 'https://globoplay.globo.com/canais/premiere/',
+    serieb: process.env.WATCH_URL_SERIEB || '',
+    lib: process.env.WATCH_URL_LIB || '',
+    cdb: process.env.WATCH_URL_CDB || '',
+    sula: process.env.WATCH_URL_SULA || '',
+  } as Record<string, string>,
   simulations: Number(process.env.SIMULATIONS || 10000),
   model: (process.env.MODEL === 'poisson' ? 'poisson' : 'dixon-coles') as 'poisson' | 'dixon-coles',
   // Dixon-Coles: quanto o peso de um jogo antigo cai por dia.

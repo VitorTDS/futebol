@@ -33,7 +33,7 @@ function matchCard(m, watchUrl, { showComp = false } = {}) {
       </div>
       <div class="match-foot">
         <span>${live ? 'Placar final mais provável' : 'Placar mais provável'}: <b>${lh} × ${la}</b></span>
-        <a class="watch" href="${escapeHtml(watchUrl)}" target="_blank" rel="noopener">📺 Assistir</a>
+        ${watchButton(m.comp ?? state.comp, watchUrl)}
       </div>`;
   }
 

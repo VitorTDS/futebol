@@ -50,7 +50,7 @@ async function loadHero() {
       <div class="palpite">${live ? 'Placar final mais provável' : 'Placar mais provável'}: ${p.likelyScore[0]} × ${p.likelyScore[1]}</div></div>`
         : ''
     }
-    <a class="ver-detalhes" href="${jogoHref(m.id)}">Ver detalhes do jogo ›</a>`;
+    <div class="destaque-links">${finished ? '' : watchButton(state.comp, '', 'watch')}<a class="ver-detalhes" href="${jogoHref(m.id)}">Ver detalhes do jogo ›</a></div>`;
   // Só redesenha se algo mudou, para as barras não recomeçarem a cada atualização.
   if (state.heroHtml === html) return;
   state.heroHtml = html;

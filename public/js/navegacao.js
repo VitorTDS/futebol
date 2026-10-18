@@ -36,7 +36,12 @@ async function checkSource() {
     : '⚠ A fonte dos dados está fora do ar.';
 }
 
+// Cada carga de tela ganha um número: se a pessoa já foi para outra tela quando
+// esta termina (internet lenta), o resultado dela não vale mais
+state.refreshSeq = 0;
+
 async function refresh() {
+  const seq = ++state.refreshSeq;
   checkSource().catch(() => {});
   try {
     const hero = loadHero();
@@ -47,7 +52,13 @@ async function refresh() {
     if (CHART_TABS.has(state.tab)) await ensureChart();
     await loaders[state.tab]();
     await hero;
+    // Deu certo: some o aviso de erro que tenha sobrado de uma carga anterior
+    if (seq === state.refreshSeq && $('#banner').classList.contains('error')) showBanner('');
   } catch (err) {
+    // Carga de uma tela que a pessoa já deixou: o erro dela não interessa mais
+    if (seq !== state.refreshSeq) return;
+    // No console fica o erro completo (com a linha), para investigar
+    console.error(err);
     showBanner(`Não foi possível carregar os dados: ${err.message}`, true);
   }
 }

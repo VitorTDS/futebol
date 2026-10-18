@@ -954,6 +954,19 @@ app.get(
   }),
 );
 
+// Botão "Assistir" de cada campeonato: link e nome do canal (para o botão dizer "no Premiere")
+app.get('/api/assistir', (_req, res) => {
+  const label = (url: string) => (url.includes('/canais/premiere') ? 'Premiere' : url.includes('globoplay') ? 'Globoplay' : null);
+  res.json(
+    Object.fromEntries(
+      Object.entries(config.watch).map(([comp, url]) => {
+        const u = url || config.watchUrl;
+        return [comp, { url: u, label: label(u) }];
+      }),
+    ),
+  );
+});
+
 // Para a hospedagem saber que o servidor está de pé (e para um "despertador" externo)
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });

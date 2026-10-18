@@ -77,6 +77,7 @@ function renderMatchPage() {
     </div>
     ${espn?.events?.some((e) => ['goal', 'penalty', 'own-goal'].includes(e.type)) ? `<div class="jh-autores"><ul>${scorers('home')}</ul><span>⚽</span><ul>${scorers('away')}</ul></div>` : ''}
     ${tieLine(d)}
+    ${finished ? '' : `<div class="jh-assistir">${watchButton(d.competition ?? 'bsa', '')}</div>`}
     <div class="jh-meta">${d.competition ? `${escapeHtml(compName(d.competition))} · ${escapeHtml(d.stageLabel)}${m.group ? ` · Grupo ${escapeHtml(m.group.replace('GROUP_', ''))}` : ''}` : `Brasileirão · Rodada ${m.matchday}`}${espn?.venue ? ` · ${escapeHtml(espn.venue.name)}${espn.venue.city ? `, ${escapeHtml(espn.venue.city)}` : ''}` : ''}</div>`;
 
   const tabs = JOGO_TABS.filter(([k]) => k !== 'tabela' || d.standings);

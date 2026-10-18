@@ -900,3 +900,7 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
   .bell.tema { right: 58px; }
 }
 .fonte-aviso.offline { background: #cfd8e3; }
+
+/* Botão "Assistir" também no destaque do topo e na página do jogo */
+.destaque-links { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+.jh-assistir { margin-top: 12px; display: flex; justify-content: center; }
