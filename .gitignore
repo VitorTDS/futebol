@@ -1,3 +1,6 @@
 node_modules/
 .env
 data/cache/
+
+# Chaves para colar no Render (segredo: nunca vai para o GitHub)
+chaves-render.txt

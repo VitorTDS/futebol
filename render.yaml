@@ -11,16 +11,25 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
-        value: 24
+        value: "24"
       - key: NODE_ENV
         value: production
+      # O plano grátis tem pouco processador e 512 MB de memória. Com estes três
+      # valores o pico de memória cai de ~400 para ~270 MB e as contas ficam mais leves:
+      # menos simulações (a diferença nas chances é pequena), meia-vida fixa no valor que
+      # a calibração sempre escolhe (sem refazer 11 backtests a cada resultado) e um
+      # teto de memória para o Node limpar antes de chegar perto do limite.
+      - key: SIMULATIONS
+        value: "4000"
+      - key: TIME_DECAY
+        value: "0.003"
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=320
       - key: FOOTBALL_DATA_TOKEN
         sync: false
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY
-        sync: false
-      - key: VAPID_SUBJECT
         sync: false
       - key: APIFOOTBALL_KEY
         sync: false

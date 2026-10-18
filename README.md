@@ -146,17 +146,26 @@ um app na tela de início e manda notificação de gol mesmo com o celular bloqu
 
 O jeito mais simples é o [Render](https://render.com) (tem plano grátis):
 
-1. Gere as chaves das notificações (uma vez só) e guarde as duas linhas:
+1. Gere as chaves das notificações (uma vez só). Elas ficam em `chaves-render.txt`,
+   que o git ignora (nunca vai para o GitHub):
    ```bash
-   npm run chaves-push
+   node -e "const k=require('web-push').generateVAPIDKeys();require('fs').writeFileSync('chaves-render.txt','VAPID_PUBLIC_KEY
+'+k.publicKey+'
+
+VAPID_PRIVATE_KEY
+'+k.privateKey+'
+')"
    ```
+   (ou `npm run chaves-push`, que mostra as duas na tela)
 2. Crie uma conta no Render e entre com o GitHub.
 3. Em **New → Blueprint**, escolha este repositório. O Render lê o `render.yaml`
    e pede os valores secretos:
    - `FOOTBALL_DATA_TOKEN`: o mesmo token do `.env`
-   - `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`: as duas linhas do passo 1
-   - `VAPID_SUBJECT`: `mailto:` + o seu e-mail
+   - `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`: copie do `chaves-render.txt`
    - `APIFOOTBALL_KEY`: pode deixar em branco
+
+   O `render.yaml` já vem com valores leves para o plano grátis (4.000 simulações,
+   meia-vida fixa e teto de memória): o pico de memória fica em ~270 MB dos 512 MB.
 4. Espere o deploy terminar e abra o endereço `https://...onrender.com`.
 5. **O plano grátis "dorme" depois de 15 minutos sem visita** (e aí não vê os
    gols). Para ele ficar sempre acordado, crie um alarme grátis no

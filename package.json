@@ -16,7 +16,7 @@
     "test:telas": "node --test --test-timeout=600000 test-telas/telas.test.ts"
   },
   "dependencies": {
-    "compression": "^1.8.0",
+    "compression": "^1.8.2",
     "express": "^5.1.0",
     "web-push": "^3.6.7"
   },

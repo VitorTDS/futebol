@@ -73,7 +73,9 @@ function setup(): Promise<{ publicKey: string }> {
         await writeFile(KEYS_FILE, JSON.stringify(keys));
       }
     }
-    webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:painel@example.com', keys!.publicKey, keys!.privateKey);
+    // Contato do painel para os serviços de push: o informado, ou o endereço que o Render dá sozinho
+    const subject = process.env.VAPID_SUBJECT || process.env.RENDER_EXTERNAL_URL || 'mailto:painel@example.com';
+    webpush.setVapidDetails(subject, keys!.publicKey, keys!.privateKey);
     try {
       for (const s of JSON.parse(await readFile(SUBS_FILE, 'utf8')) as Subscriber[]) subscribers.set(s.subscription.endpoint, s);
     } catch {
