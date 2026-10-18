@@ -1010,3 +1010,38 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
   #jogo-share { float: right; margin-top: -2px; }
   .jogo-tabs button { font-size: 12px; padding: 8px 12px; }
 }
+
+/* O desenho do campo nunca sai do topo. Em alguns celulares (Safari do iPhone) o
+   overflow: hidden não corta elemento com 3D, e o campo cobria a tabela por baixo */
+.gramado { overflow: hidden; clip-path: inset(0); }
+@media (max-width: 640px) {
+  /* No celular o campo é plano (sem 3D): não tem o que escapar, e pesa menos */
+  .gramado { perspective: none; }
+  .campo { top: 50%; width: 760px; height: 440px; transform: translate(-50%, -50%); opacity: 0.6; }
+  .campo svg { animation: none; stroke-dashoffset: 0; }
+}
+
+/* Setas do topo nas pontas da linha do "Assistir" e "Ver detalhes" */
+.destaque-escolha .destaque-links { margin-top: 0; }
+.destaque-escolhido { margin-top: 8px; font-size: 12px; color: var(--giz-mute); font-weight: 700; }
+
+@media (max-width: 640px) {
+  /* Topo compacto: título numa linha, jogo em destaque numa faixa só */
+  .brand h1 { font-size: 17px; white-space: nowrap; }
+  .brand h1 span { margin-left: 2px; }
+  .topo { padding-bottom: 2px; gap: 8px; }
+  .tag-vivo { margin-bottom: 0; }
+  .placar { grid-template-columns: 1fr auto 1fr; gap: 8px; margin-top: 8px; }
+  .lado { flex-direction: row; justify-content: flex-end; gap: 6px; min-width: 0; }
+  .placar > .lado:last-child { flex-direction: row-reverse; }
+  .lado img, .lado .badge { width: 30px; height: 30px; filter: none; }
+  .lado b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gols { font-size: 26px; }
+  .gols span { font-size: 18px; margin: 0 4px; }
+  .chances { margin-top: 8px; }
+  .chances .problabels { font-size: 11px; margin-top: 3px; }
+  .palpite { display: none; }
+  .destaque-escolha { margin-top: 8px; justify-content: space-between; }
+  .destaque-escolhido { margin-top: 6px; font-size: 11px; }
+  .hero { padding-bottom: 10px; }
+}

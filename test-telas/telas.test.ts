@@ -177,9 +177,9 @@ test('botões principais funcionam', async () => {
   // Jogo do topo: a seta escolhe outro jogo e fixa; "automático" volta ao normal
   await visit(page, '#/tabela');
   await page.click('.destaque-escolha .seta[data-hero="1"]');
-  await page.waitForFunction(() => document.querySelector('.destaque-escolha')!.textContent!.includes('Escolhido por você'));
-  await page.click('.destaque-escolha [data-hero="auto"]');
-  await page.waitForFunction(() => !document.querySelector('.destaque-escolha')!.textContent!.includes('Escolhido por você'));
+  await page.waitForFunction(() => document.querySelector('#destaque')!.textContent!.includes('Escolhido por você'));
+  await page.click('#destaque [data-hero="auto"]');
+  await page.waitForFunction(() => !document.querySelector('#destaque')!.textContent!.includes('Escolhido por você'));
 
   // Celular: chavinha da tabela troca as colunas ("Chances" mostra título, vaga e queda)
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });

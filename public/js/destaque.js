@@ -87,12 +87,12 @@ async function loadHero() {
       <div class="palpite">${live ? 'Placar final mais provável' : 'Placar mais provável'}: ${p.likelyScore[0]} × ${p.likelyScore[1]}</div></div>`
         : ''
     }
+    ${pinned ? `<div class="destaque-escolhido">📌 Escolhido por você · <button class="link-btn" data-hero="auto">↺ automático</button></div>` : ''}
     <div class="destaque-escolha">
-      <button class="seta" data-hero="-1" aria-label="Jogo anterior">‹</button>
-      <span>${pinned ? `📌 Escolhido por você · <button class="link-btn" data-hero="auto">↺ automático</button>` : 'Escolha o jogo do topo nas setas'}</span>
-      <button class="seta" data-hero="1" aria-label="Próximo jogo">›</button>
-    </div>
-    <div class="destaque-links">${finished ? '' : watchButton(state.comp, '', 'watch')}<a class="ver-detalhes" href="${jogoHref(m.id)}">Ver detalhes do jogo ›</a></div>`;
+      <button class="seta" data-hero="-1" aria-label="Jogo anterior" title="Jogo anterior">‹</button>
+      <div class="destaque-links">${finished ? '' : watchButton(state.comp, '', 'watch')}<a class="ver-detalhes" href="${jogoHref(m.id)}">Ver detalhes <span class="hide-sm">do jogo </span>›</a></div>
+      <button class="seta" data-hero="1" aria-label="Próximo jogo" title="Próximo jogo">›</button>
+    </div>`;
   // Só redesenha se algo mudou, para as barras não recomeçarem a cada atualização.
   if (state.heroHtml === html) return;
   state.heroHtml = html;
