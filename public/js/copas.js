@@ -8,7 +8,7 @@ async function libMeta() {
   // A linha do topo é de todas as telas: se a pessoa já trocou de campeonato, não escreve
   if (state.comp === comp) {
     const updated = new Date(o.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    $('#meta').textContent = `${CUP_INFO[comp].title} · ${o.currentStage.label} · fonte: ${o.source} · atualizado às ${updated}`;
+    $('#meta').innerHTML = `${escapeHtml(CUP_INFO[comp].title)} · ${escapeHtml(o.currentStage.label)}<span class="meta-tec"> · fonte: ${escapeHtml(o.source)}</span> · atualizado às ${updated}`;
   }
   $(`#${comp}-fase`).textContent = o.currentStage.label;
   return o;

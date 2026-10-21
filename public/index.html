@@ -135,7 +135,7 @@
           <span class="zone-dot reb"></span> Rebaixamento
           <span class="muted" id="sim-note"></span>
         </p>
-        <p id="zone-note" class="zone-note" hidden></p>
+        <div id="zone-note" class="zone-note" hidden></div>
 
         <h2 class="sec bloco-corrida">Corrida <span class="nota">quem chega?</span></h2>
         <div class="corridas bloco-corrida">
@@ -280,36 +280,40 @@
           como se o modelo tivesse rodado na véspera. Aqui está como ele se saiu.
         </p>
         <div id="history-stats" class="stats"></div>
-        <div id="model-comparison"></div>
 
-        <div class="chart-grid">
-          <figure class="chart-card">
-            <figcaption>
-              <b>Acerto por rodada</b>
-              <span class="muted">% de jogos em que o resultado mais provável aconteceu</span>
-            </figcaption>
-            <div class="chart-box"><canvas id="accuracy-chart"></canvas></div>
-          </figure>
-          <figure class="chart-card">
+        <figure class="chart-card chart-wide">
+          <figcaption>
+            <b>Acerto por rodada</b>
+            <span class="muted">% de jogos em que o resultado mais provável aconteceu</span>
+          </figcaption>
+          <div class="chart-box"><canvas id="accuracy-chart"></canvas></div>
+        </figure>
+
+        <!-- Para quem quer ir fundo: fechado por padrão, para a tela não assustar -->
+        <details class="detalhes-tec">
+          <summary>Detalhes técnicos do modelo <span class="muted">comparação, calibração e peso dos jogos antigos</span></summary>
+          <div id="model-comparison"></div>
+
+          <figure class="chart-card chart-wide">
             <figcaption>
               <b>Calibração</b>
               <span class="muted">Quando o modelo diz X%, acontece X% das vezes? Quanto mais perto da diagonal, melhor.</span>
             </figcaption>
             <div class="chart-box"><canvas id="calibration-chart"></canvas></div>
           </figure>
-        </div>
 
-        <figure class="chart-card chart-wide">
-          <figcaption>
-            <b>Peso dos jogos antigos (TIME_DECAY)</b>
-            <span class="muted">
-              O Dixon-Coles dá menos peso aos jogos mais antigos. Cada ponto é o histórico de acertos refeito com uma
-              meia-vida diferente (em quantos dias o peso de um jogo cai pela metade). Nota Brier: quanto menor, melhor.
-            </span>
-          </figcaption>
-          <p id="decay-summary" class="decay-summary"></p>
-          <div class="chart-box" id="decay-chart-box"><canvas id="decay-chart"></canvas></div>
-        </figure>
+          <figure class="chart-card chart-wide">
+            <figcaption>
+              <b>Peso dos jogos antigos (TIME_DECAY)</b>
+              <span class="muted">
+                O Dixon-Coles dá menos peso aos jogos mais antigos. Cada ponto é o histórico de acertos refeito com uma
+                meia-vida diferente (em quantos dias o peso de um jogo cai pela metade). Nota Brier: quanto menor, melhor.
+              </span>
+            </figcaption>
+            <p id="decay-summary" class="decay-summary"></p>
+            <div class="chart-box" id="decay-chart-box"><canvas id="decay-chart"></canvas></div>
+          </figure>
+        </details>
 
         <div class="round-nav">
           <button id="history-prev" aria-label="Rodada anterior">‹</button>
@@ -432,6 +436,7 @@
             <tbody id="scout-body"></tbody>
           </table>
         </div>
+        <button type="button" id="scout-mais" class="small-btn mostrar-mais" hidden>Mostrar mais 20</button>
       </section>
 
       <section id="jogo" class="panel">

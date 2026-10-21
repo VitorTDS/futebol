@@ -172,11 +172,18 @@ function pct(p) {
   return (p * 100).toLocaleString('pt-BR', { maximumFractionDigits: p < 0.1 ? 1 : 0 }) + '%';
 }
 
+// Nome que cabe na tabela do celular, para os nomes compridos (o resto fica igual)
+const NOME_CURTO = { 'Vasco da Gama': 'Vasco', Internacional: 'Inter', Chapecoense: 'Chape', 'Athletico-PR': 'Athletico' };
+
 function teamHtml(team, { short = false, comp } = {}) {
   const icon = team.crest
     ? `<img class="crest" src="${escapeHtml(team.crest)}" alt="" loading="lazy" />`
     : `<span class="badge">${escapeHtml(team.tla)}</span>`;
-  const name = `${icon}<span>${escapeHtml(short ? team.tla : team.shortName)}</span>`;
+  const curto = !short && NOME_CURTO[team.shortName];
+  const label = curto
+    ? `<span class="nome-longo">${escapeHtml(team.shortName)}</span><span class="nome-curto">${escapeHtml(curto)}</span>`
+    : escapeHtml(short ? team.tla : team.shortName);
+  const name = `${icon}<span>${label}</span>`;
   const href = teamHref(team.id, comp);
   if (team.tbd || !href) return `<span class="team">${name}</span>`;
   return `<a class="team" href="${href}">${name}</a>`;
@@ -290,3 +297,19 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => stor
 
 // Visão da tabela no celular que a pessoa escolheu da última vez (precisa do store, definido acima)
 applyTableView(store.get('tabela.vista', 'tabela'));
+
+// Tabela ou faixa que passa da largura: apaga a borda direita enquanto ainda há o que
+// rolar, para dar a dica de que dá para arrastar para o lado
+function markScrollable(el) {
+  el.classList.toggle('tem-mais', el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+}
+let scrollHintFrame = 0;
+new MutationObserver(() => {
+  cancelAnimationFrame(scrollHintFrame);
+  scrollHintFrame = requestAnimationFrame(() => document.querySelectorAll('.table-wrap, .faixa').forEach(markScrollable));
+}).observe(document.querySelector('main'), { childList: true, subtree: true });
+document.addEventListener('scroll', (e) => e.target.matches?.('.table-wrap, .faixa') && markScrollable(e.target), true);
+// Abrir um bloco fechado (ex.: detalhes técnicos dos acertos) mostra tabelas que estavam escondidas
+for (const ev of ['resize', 'toggle']) {
+  addEventListener(ev, () => document.querySelectorAll('.table-wrap, .faixa').forEach(markScrollable), true);
+}

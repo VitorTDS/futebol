@@ -13,7 +13,8 @@ function setMeta(data) {
   const updated = new Date(data.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const bg = data.background;
   const bgText = bg.enabled && bg.seasons.length ? ` + ${bg.seasons.join(', ')}` : '';
-  $('#meta').textContent = `Rodada ${data.currentMatchday} de ${data.totalMatchdays} · fonte: ${data.source} · modelo: ${data.model}${bgText} · atualizado às ${updated}`;
+  // Fonte e modelo só no computador (no celular a linha fica curta)
+  $('#meta').innerHTML = `Rodada ${data.currentMatchday} de ${data.totalMatchdays}<span class="meta-tec"> · fonte: ${escapeHtml(data.source)} · modelo: ${escapeHtml(data.model + bgText)}</span> · atualizado às ${updated}`;
   state.metaSet = true;
 }
 
@@ -97,9 +98,13 @@ function renderZoneNote(z) {
       .filter((x) => x.p >= 0.01)
       .map((x) => `<span class="chip">até o ${x.pos}º <b>${pct(x.p)}</b></span>`)
       .join('');
-  el.innerHTML = `<b>Vagas mudam com as copas.</b> O Brasileirão dá 5 vagas na Libertadores, mas o campeão e o vice da Copa do Brasil
+  // A explicação fica fechada (as faixas de vaga, embaixo, ficam sempre à vista); a atualização
+  // de cada minuto redesenha a caixa, então guarda se a pessoa tinha aberto
+  const open = el.querySelector('details')?.open ? ' open' : '';
+  el.innerHTML = `<details${open}><summary><b>Vagas mudam com as copas.</b> <span class="muted">Por quê?</span></summary>
+    O Brasileirão dá 5 vagas na Libertadores, mas o campeão e o vice da Copa do Brasil
     e os campeões brasileiros da Libertadores e da Sul-Americana também se classificam. Quando quem ganha já está no G5, a vaga desce na tabela.
-    ${cupSourcesText(z.cupSources)}
+    ${cupSourcesText(z.cupSources)}</details>
     <span class="dist"><span class="muted">Libertadores pela tabela:</span> ${dist(z.libertadoresCutoff)}</span>
     <span class="dist"><span class="muted">Sul-Americana:</span> ${dist(z.sulamericanaCutoff)}</span>`;
 }

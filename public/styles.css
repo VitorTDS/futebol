@@ -113,7 +113,8 @@ h2 { margin: 0; font-size: 20px; }
 }
 .campo svg { width: 100%; height: 100%; stroke: rgba(241, 245, 234, 0.55); stroke-linecap: round; stroke-dasharray: 2400; stroke-dashoffset: 2400; animation: giz 2.4s ease-out forwards; }
 @keyframes giz { to { stroke-dashoffset: 0; } }
-.bola { fill: var(--amarelo); animation: rolar 9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+/* Translúcida: ela passa por trás dos textos do topo e não pode atrapalhar a leitura */
+.bola { fill: var(--amarelo); opacity: 0.3; animation: rolar 9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes rolar {
   0% { transform: translate(0, 0); } 20% { transform: translate(260px, -120px); } 40% { transform: translate(-120px, 140px); }
   60% { transform: translate(420px, 60px); } 80% { transform: translate(-380px, -80px); } 100% { transform: translate(0, 0); }
@@ -180,6 +181,8 @@ h2.sec { font-size: 28px; margin: 36px 0 18px; padding-bottom: 6px; border-botto
   background: var(--surface); border: 0; border-radius: 14px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.08);
 }
 .table-wrap { overflow-x: auto; padding: 4px; }
+/* Ainda tem coluna escondida à direita: a borda vai sumindo (ver markScrollable) */
+.tem-mais { mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { padding: 9px 8px; text-align: center; white-space: nowrap; }
 th { color: var(--muted); font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -220,6 +223,9 @@ td.prob.num { color: var(--text); font-size: 14px; min-width: 64px; }
 .zone-dot.reb { background: var(--reb); }
 
 .zone-note { background: var(--surface); border-left: 6px solid var(--amarelo); border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.5; margin: 12px 0 0; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.06); }
+.zone-note summary { cursor: pointer; }
+.zone-note summary .muted { text-decoration: underline; }
+.zone-note details[open] summary { margin-bottom: 4px; }
 .zone-note .dist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .chip { display: inline-block; background: var(--papel); border: 1.5px solid var(--tinta); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
 
@@ -292,6 +298,9 @@ td.prob.num { color: var(--text); font-size: 14px; min-width: 64px; }
   padding: 5px 12px; border-radius: 8px; font-weight: 800; font-size: 13px; box-shadow: 0 2px 0 var(--tinta);
 }
 .watch:hover { transform: translateY(-1px); }
+.watch-link { color: var(--muted); text-decoration: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 12px; font-weight: 800; }
+.nome-curto { display: none; }
+.watch-link:hover { color: var(--text); border-color: var(--tinta); }
 
 /* Página do jogo */
 body[data-tab="jogo"] .destaque { display: none; }
@@ -624,6 +633,10 @@ a.team:hover span:last-child { text-decoration: underline; text-decoration-color
 .badge.big { width: 72px; height: 72px; font-size: 18px; }
 .chance-line small { font-size: 12px; color: var(--muted); font-weight: 800; text-transform: uppercase; }
 .chart-wide { margin-bottom: 24px; }
+.detalhes-tec { margin: 0 0 24px; }
+.detalhes-tec summary { cursor: pointer; font-weight: 800; padding: 12px 14px; border: 2px dashed var(--border); border-radius: 10px; }
+.detalhes-tec summary .muted { display: block; font-weight: 400; font-size: 12px; margin: 2px 0 0; }
+.detalhes-tec[open] summary { margin-bottom: 16px; }
 .chart-card .legend { margin: 8px 0 0; }
 h3 { font-size: 18px; margin: 32px 0 12px; }
 .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 0 16px; }
@@ -665,6 +678,7 @@ td.metric { font-variant-numeric: tabular-nums; }
 .compare-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .compare-row input { flex: 1 1 200px; }
 .small-btn { border-radius: 8px; padding: 6px 10px; font-size: 13px; text-decoration: none; display: inline-block; }
+.mostrar-mais { display: block; margin: 12px auto 0; }
 .radar-box { height: 360px; }
 .metrics-table td { padding: 7px 6px; }
 .metrics-table td:first-child { white-space: normal; }
@@ -925,6 +939,7 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
 @media (max-width: 640px) {
   /* Linha de informações numa linha só */
   #meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 150px); }
+  #meta .meta-tec { display: none; }
   .brand h1 { font-size: 19px; }
   .topo { padding-top: 16px; gap: 10px; }
 
@@ -984,6 +999,8 @@ body[data-comp="serieb"] .hero::before { background: linear-gradient(90deg, #ff9
   .standings .form a, .standings .form span { width: 22px; height: 22px; }
   .standings.vista-chances th.prob { font-size: 10px; letter-spacing: 0; }
   .standings.vista-chances .team span { max-width: 84px; }
+  .standings .nome-longo { display: none; }
+  .standings .nome-curto { display: inline; }
 
   /* O jogo em destaque só nas telas principais; nas outras, direto ao assunto */
   body:not([data-tab="tabela"]):not([data-tab="lib-chave"]):not([data-tab="b-tabela"]) .destaque { display: none; }

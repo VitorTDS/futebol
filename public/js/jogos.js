@@ -15,6 +15,8 @@ function matchCard(m, watchUrl, { showComp = false, extra = '' } = {}) {
   const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const live = m.status === 'LIVE';
   const finished = m.status === 'FINISHED';
+  // Botão amarelo só no jogo que está passando ou começa em até 2 horas; nos outros, link discreto
+  const soon = live || (!finished && date - Date.now() < 2 * 3600_000);
 
   const status = live
     ? `<span class="live-tag">● AO VIVO${m.minute ? ` ${m.minute}'` : ''}</span>`
@@ -42,7 +44,7 @@ function matchCard(m, watchUrl, { showComp = false, extra = '' } = {}) {
       </div>
       <div class="match-foot">
         <span class="palpite-card">${live ? 'Placar final mais provável' : 'Placar mais provável'}: <b>${lh} × ${la}</b></span>
-        <span class="acoes-card">${watchButton(m.comp ?? state.comp, watchUrl)}${pinButton(m)}${extra}</span>
+        <span class="acoes-card">${watchButton(m.comp ?? state.comp, watchUrl, soon ? 'watch' : 'watch-link')}${pinButton(m)}${extra}</span>
       </div>`;
   }
 

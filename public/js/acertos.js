@@ -17,9 +17,9 @@ function renderHistoryStats(s) {
     ),
     statCard('Placar exato', pct(s.exactAccuracy), `${s.exactHits} placares cravados`),
     statCard(
-      'Nota de precisão (Brier)',
+      'Nota de precisão',
       brier(s.brier),
-      `quanto menor, melhor · ${better(s.brier < s.baseline.frequencyBrier)} que o palpite pela média histórica (${brier(s.baseline.frequencyBrier)})`,
+      `quanto menor, melhor · ${better(s.brier < s.baseline.frequencyBrier)} que chutar pela média dos jogos (${brier(s.baseline.frequencyBrier)})`,
     ),
   ].join('');
 }

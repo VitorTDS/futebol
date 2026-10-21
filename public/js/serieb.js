@@ -6,7 +6,7 @@ async function bMeta() {
   const o = await api('/api/serieb/overview');
   const updated = new Date(o.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   // A linha do topo é de todas as telas: só escreve se a Série B ainda está aberta
-  if (state.comp === 'serieb') $('#meta').textContent = `Série B 2026 · Rodada ${o.currentMatchday} de ${o.totalMatchdays} · fonte: ${o.source} · atualizado às ${updated}`;
+  if (state.comp === 'serieb') $('#meta').innerHTML = `Série B 2026 · Rodada ${o.currentMatchday} de ${o.totalMatchdays}<span class="meta-tec"> · fonte: ${escapeHtml(o.source)}</span> · atualizado às ${updated}`;
   $('#serieb-fase').textContent = `Rodada ${o.currentMatchday}`;
   return o;
 }

@@ -53,6 +53,8 @@ function percentileChip(p) {
   return `<span class="pchip ${tier}" title="Percentil ${Math.round(p)}">${Math.round(p)}</span>`;
 }
 
+const SCOUT_PAGE = 20;
+
 async function loadScout() {
   const s = state.scout;
   const params = new URLSearchParams({
@@ -83,13 +85,16 @@ async function loadScout() {
     ${data.columns.map((c) => th(c.key, escapeHtml(c.label) + (c.format === 'per90' ? '<small>/90</small>' : ''))).join('')}
   </tr>`;
 
+  // Começa com 20 linhas (a lista inteira fica longa demais no celular); "Mostrar mais" abre de 20 em 20
+  const shown = Math.min(s.shown ?? SCOUT_PAGE, data.players.length);
   $('#scout-count').textContent =
-    data.total > data.players.length ? `Mostrando ${data.players.length} de ${data.total} jogadores` : `${data.total} jogadores`;
+    data.total > shown ? `Mostrando ${shown} de ${data.total} jogadores` : `${data.total} jogadores`;
+  $('#scout-mais').hidden = shown >= data.players.length;
 
   $('#scout-body').innerHTML = data.players.length
     ? data.players
         .map(
-          (p) => `<tr>
+          (p, i) => `<tr${i >= shown ? ' hidden' : ''}>
         <td class="left"><a class="player-link" href="#/jogador/${p.id}">${playerAvatar(p)}<span>${escapeHtml(p.name)}</span></a></td>
         <td class="left">${escapeHtml(p.team.name)}</td>
         <td class="hide-sm">${escapeHtml(p.position)}</td>
@@ -220,6 +225,14 @@ async function loadPlayer() {
 }
 
 let scoutSearchTimer;
+$('#scout-mais').addEventListener('click', () => {
+  state.scout.shown = (state.scout.shown ?? SCOUT_PAGE) + SCOUT_PAGE;
+  refresh();
+});
+// Filtro novo: volta para as primeiras 20 linhas
+$('#scout .filters').addEventListener('input', () => (state.scout.shown = SCOUT_PAGE));
+$('#scout .filters').addEventListener('change', () => (state.scout.shown = SCOUT_PAGE));
+
 $('#scout-q').addEventListener('input', () => {
   clearTimeout(scoutSearchTimer);
   scoutSearchTimer = setTimeout(refresh, 250);
