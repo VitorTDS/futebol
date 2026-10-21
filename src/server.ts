@@ -1136,10 +1136,36 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(502).json({ error: err.message });
 });
 
+// Telas que demoram para calcular na primeira visita (ex.: acertos ~18 s no plano grátis do Render)
+const WARM_PATHS = [
+  '/api/overview', '/api/matches', '/api/agenda', '/api/history', '/api/evolution', '/api/chances', '/api/mercado', '/api/scorers',
+  '/api/serieb/overview', '/api/serieb/matches',
+  ...['lib', 'cdb', 'sula'].flatMap((c) => [`/api/${c}/overview`, `/api/${c}/matches`, `/api/${c}/scorers`]),
+  '/api/lib/groups', '/api/sula/groups',
+];
+
+/**
+ * Pede as telas ao próprio servidor, uma de cada vez (para não estourar a memória), para que
+ * a primeira pessoa depois de o servidor acordar, ou de um resultado novo, já encontre tudo
+ * calculado. Pedidos de dentro não contam como visita: o Render continua podendo dormir.
+ */
+async function warmUp() {
+  for (const p of WARM_PATHS) {
+    try {
+      await (await fetch(`http://localhost:${config.port}${p}`)).arrayBuffer();
+    } catch {
+      // tela com problema: a visita normal mostra o erro
+    }
+  }
+}
+
 app.listen(config.port, () => {
   console.log(`⚽ Dashboard rodando em http://localhost:${config.port}`);
   console.log(`   Fonte de dados: ${provider.name} · modelo: ${MODEL_LABELS[config.model]}`);
   getAnalysis().catch(() => {}); // já começa a calcular (e a calibrar) sem esperar a primeira visita
+  // Depois de ligar e a cada 5 minutos (se nada mudou, as respostas já estão guardadas e é rápido)
+  const warm = () => warmUp().finally(() => setTimeout(warm, 5 * 60_000));
+  setTimeout(warm, 2_000);
   for (const source of LIVE_SOURCES) watchLive(source);
   if (!config.footballDataToken) console.log('   (crie um arquivo .env com FOOTBALL_DATA_TOKEN para usar dados reais)');
 });
